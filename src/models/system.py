@@ -98,7 +98,8 @@ class System:
             probabilidad = ncubo.data
             if ncubo.dims.size:
                 inicial = tuple(self.estado_inicial[j] for j in ncubo.dims)
-                probabilidad = ncubo.data[inicial]
+								# HARDCODED - Little-endian encoding
+                probabilidad = ncubo.data[inicial[::-1]]
             distribucion[i] = probabilidad
         return distribucion
 
