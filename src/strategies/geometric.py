@@ -60,18 +60,31 @@ class GeometricSIA(SIA):
         dims = self.sia_subsistema.dims_ncubos
         self.estado_inicial = self.sia_subsistema.estado_inicial[dims]
         self.estado_final = 1 - self.estado_inicial
-        mip = self._find_mip()
+        self._find_mip()
 
-        fmt_mip = fmt_biparticion_q(list(mip), self._nodes_complement(mip))
-
-        return Solution(
-            estrategia=LABEL,
-            perdida=self.memoria_particiones[mip][0],
-            distribucion_subsistema=self.sia_dists_marginales,
-            distribucion_particion=self.memoria_particiones[mip][1],
-            tiempo_ejecucion=time.time() - self.sia_tiempo_inicio,
-            particion=fmt_mip,
+        mejor_valor = min(
+            v[0] for v in self.memoria_particiones.values()
         )
+        mips = [
+            k for k, v in self.memoria_particiones.items()
+            if v[0] == mejor_valor
+        ]
+
+        soluciones = []
+        for mip in mips:
+            fmt_mip = fmt_biparticion_q(list(mip), self._nodes_complement(mip))
+            soluciones.append(
+                Solution(
+                    estrategia=LABEL,
+                    perdida=self.memoria_particiones[mip][0],
+                    distribucion_subsistema=self.sia_dists_marginales,
+                    distribucion_particion=self.memoria_particiones[mip][1],
+                    tiempo_ejecucion=time.time() - self.sia_tiempo_inicio,
+                    particion=fmt_mip,
+                )
+            )
+
+        return soluciones
 
     def _nodes_complement(self, nodes: list[tuple[int, int]]):
         return list(set(self.vertices) - set(nodes))
@@ -98,9 +111,6 @@ class GeometricSIA(SIA):
             key = [(0, nodo) for nodo in presentes]
             key.extend([(1, nodo) for nodo in futuros])
             self.memoria_particiones[tuple(key)] = (emd, dist)
-        return min(
-            self.memoria_particiones, key=lambda k: self.memoria_particiones[k][0]
-        )
 
     def _calcular_costos_nivel(self, estado_final: np.ndarray, nivel):
         n = len(estado_final)

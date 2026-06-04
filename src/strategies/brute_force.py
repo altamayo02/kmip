@@ -29,6 +29,7 @@ class BruteForce(SIA):
         profiler_manager.start_session(
             f"NET{len(tpm[1])}{config.pagina_muestra}"
         )
+        self.early_stopping = True
         self.distancia_metrica = emd_efecto
         self.logger = SafeLogger(TAG_STRATEGY)
 
@@ -38,23 +39,12 @@ class BruteForce(SIA):
     ):
         self.sia_preparar_subsistema(estado_inicial, condiciones, alcance, mecanismo)
 
-        solucion_base = Solution(
-            estrategia=LABEL,
-            perdida=-1.0,
-            distribucion_subsistema=self.sia_dists_marginales,
-            distribucion_particion=np.array([0]),
-            particion="NO-PARTITION\n",
-            quiere_hablar=True,
-        )
-
-        small_phi = np.inf
-        mejor_dist_marg = np.array([0])
-
         futuros = self.sia_subsistema.indices_ncubos
         presentes = self.sia_subsistema.dims_ncubos
-        biparticion_prim = ((), ())
-        biparticion_dual = ((), ())
         m, n = futuros.size, presentes.size
+
+        small_phi = np.inf
+        mejores: list[dict] = []
 
         for subalcance, submecanismo in _biparticiones(
             futuros, presentes, (1 << m) * (1 << n)
@@ -69,36 +59,51 @@ class BruteForce(SIA):
             emd_value = self.distancia_metrica(
                 part_marg_dist, self.sia_dists_marginales
             )
+
             if emd_value < small_phi:
                 small_phi = emd_value
-                mejor_dist_marg = part_marg_dist
-                biparticion_prim = submecanismo, subalcance
-                biparticion_dual = (
-                    set(presentes) - set(submecanismo),
-                    set(futuros) - set(subalcance),
+                mejores = [
+                    {
+                        "dist": part_marg_dist,
+                        "prim": (submecanismo, subalcance),
+                        "dual": (
+                            set(presentes) - set(submecanismo),
+                            set(futuros) - set(subalcance),
+                        ),
+                    }
+                ]
+                if emd_value == 0.0 and self.early_stopping:
+                    break
+            elif emd_value == small_phi:
+                mejores.append(
+                    {
+                        "dist": part_marg_dist,
+                        "prim": (submecanismo, subalcance),
+                        "dual": (
+                            set(presentes) - set(submecanismo),
+                            set(futuros) - set(subalcance),
+                        ),
+                    }
                 )
-                if emd_value == 0.0:
-                    solucion_base.perdida = emd_value
-                    solucion_base.distribucion_particion = part_marg_dist
-                    solucion_base.particion = fmt_biparticion_fuerza_bruta(
-                        [biparticion_prim[0], biparticion_prim[1]],
-                        [biparticion_dual[0], biparticion_dual[1]],
-                    )
-                    solucion_base.tiempo_ejecucion = (
-                        time.time() - self.sia_tiempo_inicio
-                    )
-                    return solucion_base
 
-        biparticion_formateada = fmt_biparticion_fuerza_bruta(
-            [biparticion_prim[0], biparticion_prim[1]],
-            [biparticion_dual[0], biparticion_dual[1]],
-        )
+        soluciones = []
+        for mejor in mejores:
+            fmt = fmt_biparticion_fuerza_bruta(
+                [mejor["prim"][0], mejor["prim"][1]],
+                [mejor["dual"][0], mejor["dual"][1]],
+            )
+            soluciones.append(
+                Solution(
+                    estrategia=LABEL,
+                    perdida=small_phi,
+                    distribucion_subsistema=self.sia_dists_marginales,
+                    distribucion_particion=mejor["dist"],
+                    tiempo_ejecucion=time.time() - self.sia_tiempo_inicio,
+                    particion=fmt,
+                )
+            )
 
-        solucion_base.perdida = small_phi
-        solucion_base.distribucion_particion = mejor_dist_marg
-        solucion_base.particion = biparticion_formateada
-        solucion_base.tiempo_ejecucion = time.time() - self.sia_tiempo_inicio
-        return solucion_base
+        return soluciones
 
     @profile(context={"type": TAG_FULL_ANALYSIS})
     def analizar_completamente_una_red(self) -> None:

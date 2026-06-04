@@ -7,6 +7,7 @@ import numpy.typing as NDArray
 from src.config import Config
 from src.middlewares.slogger import SafeLogger
 from src.models.system import System
+from src.solution import Solution
 
 
 class SIA(ABC):
@@ -22,7 +23,13 @@ class SIA(ABC):
         self.sia_tiempo_inicio: float = 0.0
 
     @abstractmethod
-    def aplicar_estrategia(self):
+    def aplicar_estrategia(
+        self,
+        estado_inicial: str,
+        condiciones: str,
+        alcance: str,
+        mecanismo: str,
+    ) -> list[Solution]:
         pass
 
     def sia_preparar_subsistema(

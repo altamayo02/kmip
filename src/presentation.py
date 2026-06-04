@@ -14,7 +14,10 @@ from src.config import Config
 init()
 
 
-def mostrar_solucion(solucion: Solution, config: Config) -> None:
+def mostrar_solucion(soluciones: list[Solution], config: Config) -> None:
+    if not soluciones:
+        return
+
     espaciado = 64
     bilinea = "\u2550" * espaciado
     trilinea = "\u2261" * espaciado
@@ -40,6 +43,8 @@ def mostrar_solucion(solucion: Solution, config: Config) -> None:
         )
         return f"[ {datos}{mensaje_desborde} {Fore.WHITE}]"
 
+    solucion = soluciones[0]
+
     if solucion.quiere_hablar:
         voz = Thread(target=_anunciar_solucion, args=(solucion,))
         voz.start()
@@ -62,17 +67,26 @@ def mostrar_solucion(solucion: Solution, config: Config) -> None:
 
 {Fore.YELLOW}Distribucion {tipo_distribucion} del Subsistema:
 {Style.RESET_ALL}{formatear_distribucion(solucion.distribucion_subsistema)}
-{Fore.YELLOW}Distribucion {tipo_distribucion} de la Partición:
-{Style.RESET_ALL}{formatear_distribucion(solucion.distribucion_particion)}
 
-{Fore.YELLOW}Mejor Bi-Partición:
-{Fore.MAGENTA}{solucion.particion}
-{Fore.GREEN}Perdida m\u00ednima ( {chr(966)} ) = {solucion.perdida:.4f}
+{Fore.YELLOW}Perdida minima ( {chr(966)} ) = {solucion.perdida:.4f}{Fore.WHITE}"""
 
-{Fore.BLUE}Tiempos de ejecución:
+    for i, sol in enumerate(soluciones):
+        output += f"""
+
+{'-' * espaciado}
+{Fore.YELLOW}Bi-Particion {i + 1} de {len(soluciones)}:
+{Style.RESET_ALL}Distribucion {tipo_distribucion} de la Particion:
+{formatear_distribucion(sol.distribucion_particion)}
+
+{Fore.MAGENTA}{sol.particion}{Style.RESET_ALL}"""
+
+    output += f"""
+
+{Fore.BLUE}Tiempos de ejecucion:
 {Fore.WHITE}Horas: {tiempo_hrs} = Minutos: {tiempo_min} = Segundos: {tiempo_seg}
 
 {Fore.CYAN}{trilinea}{Style.RESET_ALL}"""
+
     try:
         print(output)
     except UnicodeEncodeError:

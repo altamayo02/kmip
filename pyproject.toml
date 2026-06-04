@@ -1,5 +1,5 @@
 [project]
-name = "proyecto-mip"
+name = "kmip"
 version = "0.1.0"
 description = "Framework for the Minimal Information Partition problem (IIT 3.0)."
 readme = "README.md"

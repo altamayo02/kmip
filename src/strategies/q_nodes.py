@@ -28,6 +28,7 @@ class QNodes(SIA):
         profiler_manager.start_session(
             f"NET{len(tpm[1])}{config.pagina_muestra}"
         )
+        self.early_stopping = True
         self.m: int
         self.n: int
         self.etiquetas = [tuple(s.lower() for s in ABECEDARY), ABECEDARY]
@@ -67,19 +68,24 @@ class QNodes(SIA):
 
         vertices = list(presente + futuro)
         self.vertices = set(presente + futuro)
-        mip = self._algorithm(vertices)
+        mips = self._algorithm(vertices)
 
-        fmt_mip = fmt_biparticion_q(list(mip), self._nodes_complement(mip))
-        perdida_mip, dist_marginal_mip = self.memoria_grupo_candidato[mip]
+        soluciones = []
+        for mip in mips:
+            fmt_mip = fmt_biparticion_q(list(mip), self._nodes_complement(mip))
+            perdida_mip, dist_marginal_mip = self.memoria_grupo_candidato[mip]
+            soluciones.append(
+                Solution(
+                    estrategia=LABEL,
+                    perdida=perdida_mip,
+                    distribucion_subsistema=self.sia_dists_marginales,
+                    distribucion_particion=dist_marginal_mip,
+                    tiempo_ejecucion=time.time() - self.sia_tiempo_inicio,
+                    particion=fmt_mip,
+                )
+            )
 
-        return Solution(
-            estrategia=LABEL,
-            perdida=perdida_mip,
-            distribucion_subsistema=self.sia_dists_marginales,
-            distribucion_particion=dist_marginal_mip,
-            tiempo_ejecucion=time.time() - self.sia_tiempo_inicio,
-            particion=fmt_mip,
-        )
+        return soluciones
 
     @profile(context={"type": TAG_ANALYSIS})
     def _algorithm(self, vertices: list[tuple[int, int]]):
@@ -102,7 +108,7 @@ class QNodes(SIA):
                     emd_iteracion = emd_union - emd_delta
 
                     if emd_iteracion < emd_local:
-                        if emd_delta == 0:
+                        if emd_delta == 0 and self.early_stopping:
                             clave = (
                                 tuple(deltas_ciclo[k])
                                 if isinstance(deltas_ciclo[k], list)
@@ -112,7 +118,7 @@ class QNodes(SIA):
                                 emd_delta,
                                 dist_marginal_delta,
                             )
-                            return clave
+                            return [clave]
 
                         emd_local = emd_iteracion
                         indice_mip = k
@@ -145,10 +151,13 @@ class QNodes(SIA):
 
             vertices = omegas_ciclo
 
-        return min(
-            self.memoria_grupo_candidato,
-            key=lambda k: self.memoria_grupo_candidato[k][0],
+        mejor_valor = min(
+            v[0] for v in self.memoria_grupo_candidato.values()
         )
+        return [
+            k for k, v in self.memoria_grupo_candidato.items()
+            if v[0] == mejor_valor
+        ]
 
     def _funcion_submodular(
         self, deltas: Union[tuple, list[tuple]], omegas: list[Union[tuple, list[tuple]]]
