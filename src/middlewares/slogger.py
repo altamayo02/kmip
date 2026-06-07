@@ -61,7 +61,7 @@ class SafeLogger:
         date_dir = base_log_dir / current_time.strftime("%d_%m_%Y")
         date_dir.mkdir(exist_ok=True)
 
-        hour_dir = date_dir / f"{current_time.strftime('%H')}hrs"
+        hour_dir = date_dir / f"{current_time.strftime('%Hh_%Mm_%Ss')}"
         hour_dir.mkdir(exist_ok=True)
 
         detailed_log_file = hour_dir / f"{name}.log"

@@ -26,7 +26,7 @@ class QNodes(SIA):
     def __init__(self, tpm: np.ndarray, config: Config):
         super().__init__(tpm, config)
         profiler_manager.start_session(
-            f"NET{len(tpm[1])}{config.pagina_muestra}"
+            f"QNodes{len(tpm[1])}{config.pagina_muestra}"
         )
         self.early_stopping = True
         self.m: int
@@ -87,7 +87,6 @@ class QNodes(SIA):
 
         return soluciones
 
-    @profile(context={"type": TAG_ANALYSIS})
     def _algorithm(self, vertices: list[tuple[int, int]]):
         for i in range(len(vertices) - 1):
             omegas_ciclo = [vertices[0]]

@@ -27,7 +27,7 @@ class BruteForce(SIA):
     def __init__(self, tpm: np.ndarray, config: Config):
         super().__init__(tpm, config)
         profiler_manager.start_session(
-            f"NET{len(tpm[1])}{config.pagina_muestra}"
+            f"Force{len(tpm[1])}{config.pagina_muestra}"
         )
         self.early_stopping = True
         self.distancia_metrica = emd_efecto

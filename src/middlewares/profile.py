@@ -31,7 +31,7 @@ class ProfilingManager:
 
     def start_session(self, session_name: str) -> None:
         if self.enabled:
-            timestamp = datetime.now().strftime("%d_%m_%Y/%Hhrs")
+            timestamp = datetime.now().strftime("%d_%m_%Y/%Hh_%Mm_%Ss")
             session_path = self.output_dir / session_name / timestamp
             session_path.mkdir(parents=True, exist_ok=True)
             self.current_session = str(session_path.relative_to(self.output_dir))

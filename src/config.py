@@ -4,7 +4,7 @@ from src.models.enums import MetricDistance, Notation, TimeEMD
 
 @dataclass
 class Config:
-    semilla_numpy: int = 73
+    semilla_numpy: int = 42
     pagina_muestra: str = "A"
     distancia_metrica: str = MetricDistance.HAMMING.value
     notacion_indexado: str = Notation.LIL_ENDIAN.value

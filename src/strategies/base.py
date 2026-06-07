@@ -19,7 +19,7 @@ class SIA(ABC):
         self.sia_logger = SafeLogger(self.TAG_PREPARACION)
 
         self.sia_subsistema: System
-        self.sia_dists_marginales: NDArray[np.float32]
+        self.sia_dists_marginales: np.ndarray
         self.sia_tiempo_inicio: float = 0.0
 
     @abstractmethod

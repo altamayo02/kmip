@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from src.loader import TpmLoader, SAMPLES_PATH
 
-SEMILLA = 73
+SEMILLA = 42
 
 
 def generar_tpm(N, pagina, deterministico=False):

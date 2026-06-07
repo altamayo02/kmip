@@ -26,7 +26,7 @@ class GeometricSIA(SIA):
     def __init__(self, tpm: np.ndarray, config: Config):
         super().__init__(tpm, config)
         profiler_manager.start_session(
-            f"NET{len(tpm[1])}{config.pagina_muestra}"
+            f"Geo{len(tpm[1])}{config.pagina_muestra}"
         )
         self.etiquetas = [tuple(s.lower() for s in ABECEDARY), ABECEDARY]
         self.logger = SafeLogger(TAG_STRATEGY)
