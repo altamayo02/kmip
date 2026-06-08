@@ -219,5 +219,5 @@ __marimo__/
 
 .logs/
 results/
-data/samples/N2[5-9][A-Z].csv
+data/samples/N2[1-9][A-Z].csv
 data/samples/N[3-9][0-9][A-Z].csv
