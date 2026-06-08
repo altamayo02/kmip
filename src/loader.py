@@ -100,3 +100,5 @@ class TpmLoader:
         print(f"Tiempo de guardado: {time.time() - start_time:.2f} segundos")
 
         return filename
+
+#TpmLoader.generar(25)

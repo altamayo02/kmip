@@ -46,9 +46,10 @@ class BruteForce(SIA):
         small_phi = np.inf
         mejores: list[dict] = []
 
-        for subalcance, submecanismo in _biparticiones(
+        espacio_búsqueda = _biparticiones(
             futuros, presentes, (1 << m) * (1 << n)
-        ):
+        )
+        for subalcance, submecanismo in espacio_búsqueda:
             subsistema = self.sia_subsistema
             arr_alcance = np.array(subalcance, dtype=np.int8)
             arr_mecanismo = np.array(submecanismo, dtype=np.int8)
@@ -72,7 +73,7 @@ class BruteForce(SIA):
                         ),
                     }
                 ]
-                if emd_value == 0.0 and self.early_stopping:
+                if emd_value == 0 and self.early_stopping:
                     break
             elif emd_value == small_phi:
                 mejores.append(
@@ -108,7 +109,7 @@ class BruteForce(SIA):
     @profile(context={"type": TAG_FULL_ANALYSIS})
     def analizar_completamente_una_red(self) -> None:
         import os
-        output_dir = f"review/resolver/N{len(self.tpm[1])}{self.config.pagina_muestra}"
+        output_dir = f"results/profiling/Force{len(self.tpm[1])}{self.config.pagina_muestra}"
         os.makedirs(output_dir, exist_ok=True)
 
         initial_state = self.sia_subsistema.estado_inicial
@@ -227,9 +228,9 @@ def _biparticiones(
 ):
     if total is None:
         total = (1 << alcances.size) * (1 << mecanismos.size)
-    return islice(
-        product(_subconjuntos(alcances), _subconjuntos(mecanismos)), 1, total - 1
-    )
+    return islice(product(
+        _subconjuntos(alcances), _subconjuntos(mecanismos)
+    ), 1, total // 2)
 
 
 def _generar_candidatos(n_vars: int):

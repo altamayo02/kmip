@@ -8,7 +8,7 @@ from pyinstrument import Profiler
 from pyinstrument.renderers import HTMLRenderer
 
 
-PROFILING_PATH = Path("review/profiling")
+PROFILING_PATH = Path("results/profiling")
 HTML_EXTENSION = "html"
 
 
