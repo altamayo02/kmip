@@ -17,7 +17,7 @@ import argparse
 import json
 import time
 from collections import defaultdict
-from itertools import combinations
+from itertools import combinations, product
 
 import numpy as np
 
@@ -96,15 +96,16 @@ def all_k_partitions(m: int, n: int, k: int):
     alcance_elems = list(range(m))
     mecanismo_elems = list(range(n))
 
-    for alc_blocks in _assignments(alcance_elems, k):
-        for mech_blocks in _assignments(mecanismo_elems, k):
-            if any(len(alc_blocks[i]) == 0 and len(mech_blocks[i]) == 0
-                   for i in range(k)):
-                continue
-            yield tuple(
-                (frozenset(mech_blocks[i]), frozenset(alc_blocks[i]))
-                for i in range(k)
-            )
+    for alc_blocks, mech_blocks in product(
+        _assignments(alcance_elems, k),
+        _assignments(mecanismo_elems, k),
+    ):
+        if any(not a and not b for a, b in zip(alc_blocks, mech_blocks)):
+            continue
+        yield tuple(
+            (frozenset(mech_blocks[i]), frozenset(alc_blocks[i]))
+            for i in range(k)
+        )
 
 
 def count_k_partitions(m: int, n: int, k: int) -> int:

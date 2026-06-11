@@ -4,6 +4,20 @@ from src.functions.labels import ABECEDARY, LOWER_ABECEDARY
 VOID_STR = "\u2205"
 
 
+def fmt_kparticion(k_partition) -> str:
+    """Format a k-partition (tuple of (mechanism, alcance) frozenset pairs)."""
+    labels = []
+    for mech, alc in k_partition:
+        mech_str = ",".join(LOWER_ABECEDARY[i] for i in sorted(mech)) if mech else VOID_STR
+        alc_str = ",".join(ABECEDARY[i] for i in sorted(alc)) if alc else VOID_STR
+        labels.append((mech_str, alc_str))
+
+    widths = [max(len(m), len(a)) + 2 for m, a in labels]
+    top = "".join(f"\u239b{a:^{w}}\u239e" for (_, a), w in zip(labels, widths))
+    bot = "".join(f"\u239d{m:^{w}}\u23a0" for (m, _), w in zip(labels, widths))
+    return f"{top}\n{bot}"
+
+
 def fmt_biparticion_fuerza_bruta(
     parte_uno: list[tuple, tuple],
     parte_dos: list[tuple, tuple],

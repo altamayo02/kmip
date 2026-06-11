@@ -4,6 +4,7 @@ from src.loader import TpmLoader
 from src.strategies.brute_force import BruteForce
 from src.strategies.q_nodes import QNodes
 from src.strategies.geometric import GeometricSIA
+from strategies.k_brute_force import KBruteForce
 from src.presentation import mostrar_solucion
 from src.strategies.base import SIA
 
@@ -26,6 +27,7 @@ def iniciar(
         "BruteForce": BruteForce,
         "QNodes": QNodes,
         "Geometric": GeometricSIA,
+        "KBruteForce": KBruteForce,
     }
 
     if estrategia not in estrategias:

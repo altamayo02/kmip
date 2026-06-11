@@ -19,12 +19,14 @@ print()
 # Find opt k=2 and k=3
 opt2 = []
 for kp in all_k_partitions(3, 3, 2):
+    #print('2-Part:', kp)
     dist = k_partition_distribution(system, kp)
     emd = emd_efecto(dist, intact)
     opt2.append((emd, kp, dist))
 opt2.sort(key=lambda x: x[0])
 best2 = opt2[0][0]
 
+print()
 opt3 = []
 for kp in all_k_partitions(3, 3, 3):
     dist = k_partition_distribution(system, kp)

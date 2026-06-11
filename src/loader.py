@@ -13,8 +13,12 @@ ABC_START = "A"
 
 class TpmLoader:
     @staticmethod
-    def cargar(tamano: int, pagina: str = "A") -> np.ndarray:
-        filename = f"N{tamano}{pagina}.{CSV_EXTENSION}"
+    def cargar(
+        tamaño: int,
+        pagina: str = "A",
+        binaria: bool = True
+    ) -> np.ndarray:
+        filename = f"N{tamaño}{pagina}.{CSV_EXTENSION}"
         filepath = SAMPLES_PATH / filename
         if not filepath.exists():
             alt_paths = [
@@ -31,6 +35,15 @@ class TpmLoader:
                     f"No se encontró la TPM '{filename}'. "
                     f"Buscado en: {SAMPLES_PATH.resolve()}, {alt_paths}"
                 )
+        if tamaño > 20 and binaria:
+            raw_str = np.genfromtxt(filepath, delimiter=COLON_DELIM, dtype=str)
+            raw = np.array([int(v, 16) for v in raw_str.ravel()], dtype=np.uint64)
+            n = tamaño
+            num_states = raw.shape[0]
+            result = np.zeros((num_states, n), dtype=np.float32)
+            for col in range(n):
+                result[:, col] = (raw >> col) & 1
+            return result
         return np.genfromtxt(filepath, delimiter=COLON_DELIM)
 
     @staticmethod
@@ -80,7 +93,14 @@ class TpmLoader:
         rng = np.random.default_rng(42)
         states: np.ndarray
         if binaria:
-            states = rng.integers(2, size=(num_estados, n), dtype=np.bool)
+            if n <= 20:
+                states = rng.integers(2, size=(num_estados, n), dtype=np.bool)
+            else:
+                states = rng.integers(
+                    num_estados,
+                    size=num_estados,
+                    dtype=np.uint64
+                )
         else:
             states = rng.random((num_estados, n), np.float32)
 
@@ -88,11 +108,15 @@ class TpmLoader:
 
         print(f"Guardando en {filepath}...")
         start_time = time.time()
+        format_ = '%f'
+        if binaria:
+          format_ = '%d' if n <= 20 else '%x'
+        
         np.savetxt(
             filepath,
             states,
             delimiter=COLON_DELIM,
-            fmt="%d" if binaria else "%f",
+            fmt=format_,
         )
 
         file_size_gb = os.path.getsize(filepath) / (1024**3)
@@ -101,4 +125,4 @@ class TpmLoader:
 
         return filename
 
-#TpmLoader.generar(25)
+#TpmLoader.generar(27)
