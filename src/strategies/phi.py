@@ -1,5 +1,4 @@
 import time
-import math
 import collections
 from collections.abc import Iterable, Mapping, MutableMapping, Sequence
 
@@ -17,12 +16,11 @@ if not hasattr(collections, "Sequence"):
 
 from pyphi import Network, Subsystem
 from pyphi.labels import NodeLabels
-from pyphi.models.cuts import Bipartition, Part
-
 from src.config import Config
 from src.middlewares.slogger import SafeLogger
 from src.middlewares.profile import profiler_manager, profile
 from src.functions.labels import ABECEDARY
+from src.functions.format import fmt_kparticion
 from src.strategies.base import SIA
 from src.solution import Solution
 
@@ -44,18 +42,17 @@ class Phi(SIA):
     def aplicar_estrategia(
         self,
         estado_inicial: str,
-        condicion: str,
+        condiciones: str,
         alcance: str,
         mecanismo: str,
     ):
-        self.sia_preparar_subsistema(estado_inicial, condicion, alcance, mecanismo)
+        self.sia_preparar_subsistema(estado_inicial, condiciones, alcance, mecanismo)
 
-        estado_inicial_int = int(estado_inicial, 2)
         n_nodes = len(self.tpm[1])
-
-        node_labels = NodeLabels()
-        for i in range(n_nodes):
-            node_labels[i] = ABECEDARY[i]
+        node_labels = NodeLabels(
+            tuple(ABECEDARY[:n_nodes]),
+            tuple(range(n_nodes)),
+        )
 
         network = Network(self.tpm, node_labels=node_labels)
 
@@ -79,37 +76,27 @@ class Phi(SIA):
         )
 
         perdida = float(efecto_mip.phi)
-        particion = self._format_mip(efecto_mip, n_nodes, alcance, mecanismo)
+        particion = self._format_mip(efecto_mip)
 
         distribucion_subsistema = np.array([0.0])
         distribucion_particion = np.array([0.0])
 
-        return Solution(
+        return [Solution(
             estrategia=LABEL,
             perdida=perdida,
             distribucion_subsistema=distribucion_subsistema,
             distribucion_particion=distribucion_particion,
             tiempo_ejecucion=time.time() - self.sia_tiempo_inicio,
             particion=particion,
-            quiere_hablar=False,
-        )
+            quiere_hablar=True,
+        )]
 
-    def _format_mip(self, mip, n_nodes, alcance, mecanismo):
+    def _format_mip(self, mip):
         try:
-            parte1_mec = "".join(
-                ABECEDARY[i].lower() for i in mip.partition.mechanism
+            k_partition = tuple(
+                (frozenset(part.mechanism), frozenset(part.purview))
+                for part in mip.partition.parts
             )
-            parte1_pur = "".join(ABECEDARY[i] for i in mip.partition.purview)
-            parte2_mec = "".join(
-                ABECEDARY[i].lower()
-                for i in range(n_nodes)
-                if i not in mip.partition.mechanism
-            )
-            parte2_pur = "".join(
-                ABECEDARY[i]
-                for i in range(n_nodes)
-                if i not in mip.partition.purview
-            )
-            return f"|{parte1_pur}||{parte2_pur}|\n|{parte1_mec}||{parte2_mec}|\n"
+            return fmt_kparticion(k_partition)
         except Exception:
             return "PyPhi partition"

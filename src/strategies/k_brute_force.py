@@ -41,7 +41,7 @@ class KBruteForce(SIA):
         presentes = self.sia_subsistema.dims_ncubos
         m, n = futuros.size, presentes.size
 
-        if self.k > m:
+        if self.k > m + n:
             return [
                 Solution(
                     estrategia=LABEL,
@@ -69,8 +69,13 @@ class KBruteForce(SIA):
             elif emd_value == small_phi:
                 mejores.append({"dist": part_dist, "particion": kp})
 
+        seen = set()
         soluciones = []
         for mejor in mejores:
+            norm = _normalize_partition(mejor["particion"])
+            if norm in seen:
+                continue
+            seen.add(norm)
             fmt = fmt_kparticion(mejor["particion"])
             soluciones.append(
                 Solution(
@@ -85,6 +90,13 @@ class KBruteForce(SIA):
 
         return soluciones
 
+def _normalize_partition(partition):
+  return tuple(
+    sorted(
+      (tuple(sorted(m)), tuple(sorted(a)))
+      for m, a in partition
+    )
+  )
 
 def _assignments_actual(elements: list, k: int):
     """Assign actual elements to k labeled blocks; blocks may be empty."""
