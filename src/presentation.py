@@ -113,7 +113,7 @@ def _anunciar_solucion(solucion: Solution) -> None:
         motor.setProperty("volume", 0.9)
 
         mensaje = f"Solución encontrada con {solucion.estrategia}." + (
-            f"El valor de fi es de {solucion.perdida:.2f}"
+            f"El valor de fi es de {solucion.perdida}"
             if solucion.perdida > 0
             else "No hubo pérdida."
         )

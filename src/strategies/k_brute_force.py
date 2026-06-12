@@ -11,6 +11,8 @@ from src.middlewares.profile import profiler_manager, profile
 from src.functions.emd import emd_efecto
 from src.functions.format import fmt_kparticion
 from src.solution import Solution
+from itertools import islice
+from math import ceil
 
 
 LABEL = "KBruteForce"
@@ -105,11 +107,12 @@ def _k_partitions_actual(alcance_indices, mecanismo_indices, k: int):
     
     Each partition is a tuple of k pairs (frozenset(mechanism), frozenset(alcance)).
     """
-    alc_list = list(alcance_indices)
-    mech_list = list(mecanismo_indices)
-    for alc_blocks, mech_blocks in product(
-        _assignments_actual(alc_list, k),
-        _assignments_actual(mech_list, k),
+    alc_assign = _assignments_actual(list(alcance_indices), k)
+    mech_assign = _assignments_actual(list(mecanismo_indices), k)
+
+    total = k ** (len(alcance_indices) + len(mecanismo_indices))
+    for alc_blocks, mech_blocks in islice(
+        product(alc_assign, mech_assign), 0, ceil(total / 2)
     ):
         if any(not a and not b for a, b in zip(alc_blocks, mech_blocks)):
             continue

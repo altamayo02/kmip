@@ -17,6 +17,7 @@ def iniciar(
     estrategia: str = "QNodes",
     pagina: str = "A",
     config: Optional[Config] = None,
+		k: int = 2
 ):
     if config is None:
         config = Config(pagina_muestra=pagina)
@@ -35,8 +36,11 @@ def iniciar(
             f"Estrategia '{estrategia}' no reconocida. "
             f"Opciones: {list(estrategias.keys())}"
         )
-
-    analizador = estrategias[estrategia](gestor_sistema, config)
+    
+    if estrategias[estrategia] is KBruteForce:
+      analizador = estrategias[estrategia](gestor_sistema, config, k)
+    else:
+      analizador = estrategias[estrategia](gestor_sistema, config)
     soluciones = analizador.aplicar_estrategia(
         estado_inicial,
         condiciones,

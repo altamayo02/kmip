@@ -15,6 +15,7 @@ from src.middlewares.profile import profile, profiler_manager
 from src.functions.emd import emd_efecto
 from src.functions.labels import literales
 from src.functions.format import fmt_biparticion_fuerza_bruta
+from math import ceil
 
 
 LABEL = "BruteForce"
@@ -230,7 +231,7 @@ def _biparticiones(
         total = (1 << alcances.size) * (1 << mecanismos.size)
     return islice(product(
         _subconjuntos(alcances), _subconjuntos(mecanismos)
-    ), 1, total // 2)
+    ), 1, ceil(total / 2))
 
 
 def _generar_candidatos(n_vars: int):
