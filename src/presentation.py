@@ -74,7 +74,7 @@ def mostrar_solucion(soluciones: list[Solution], config: Config) -> None:
         output += f"""
 
 {'-' * espaciado}
-{Fore.YELLOW}Bi-Particion {i + 1} de {len(soluciones)}:
+{Fore.YELLOW}Particion {i + 1} de {len(soluciones)}:
 {Style.RESET_ALL}Distribucion {tipo_distribucion} de la Particion:
 {formatear_distribucion(sol.distribucion_particion)}
 
