@@ -54,6 +54,10 @@ class SafeLogger:
         return args_str
 
     def _setup_logger(self, name: str) -> logging.Logger:
+        logger = logging.getLogger(name)
+        if logger.handlers:
+            return logger
+
         base_log_dir = LOGS_PATH
         base_log_dir.mkdir(exist_ok=True)
 
@@ -67,10 +71,8 @@ class SafeLogger:
         detailed_log_file = hour_dir / f"{name}.log"
         last_log_file = base_log_dir / f"last_{name}.log"
 
-        logger = logging.getLogger(name)
         logger.setLevel(logging.ERROR)
         logger.propagate = False
-        logger.handlers.clear()
 
         plain_formatter = logging.Formatter(
             "%(asctime)s [%(name)s] %(levelname)s %(processName)s: %(message)s",
