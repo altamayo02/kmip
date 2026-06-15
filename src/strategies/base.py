@@ -1,5 +1,6 @@
 import time
 from abc import ABC, abstractmethod
+from typing import Optional
 
 import numpy as np
 import numpy.typing as NDArray
@@ -13,7 +14,11 @@ from src.solution import Solution
 class SIA(ABC):
     TAG_PREPARACION = "sia_preparation"
 
-    def __init__(self, tpm: np.ndarray, config: Config) -> None:
+    def __init__(
+        self, tpm: np.ndarray,
+        config: Config,
+        k: Optional[int] = None
+    ) -> None:
         self.tpm = tpm
         self.config = config
         self.sia_logger = SafeLogger(self.TAG_PREPARACION)
@@ -40,7 +45,7 @@ class SIA(ABC):
         mecanismo: str,
     ):
         if self._chequear_parametros(estado_inicial, condicion, alcance, mecanismo):
-            raise Exception(
+            raise ValueError(
                 "El estado inicial tiene una dimensión diferente "
                 "con las condiciones, alcance o mecanismo."
             )
