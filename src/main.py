@@ -6,6 +6,7 @@ from src.strategies.q_nodes import QNodes
 from src.strategies.geometric import GeometricSIA
 from src.strategies.phi import Phi
 from strategies.k_brute_force import KBruteForce
+from strategies.k_geometric import KGeometric
 from src.presentation import mostrar_solucion
 from src.strategies.base import SIA
 
@@ -23,7 +24,7 @@ def iniciar(
     if config is None:
         config = Config(pagina_muestra=pagina)
 
-    gestor_sistema = TpmLoader.cargar(len(estado_inicial), pagina)
+    tpm = TpmLoader.cargar(len(estado_inicial), pagina)
 
     estrategias: dict[str, type[SIA]] = {
         "BruteForce": BruteForce,
@@ -31,6 +32,7 @@ def iniciar(
         "Phi": Phi,
         "Geometric": GeometricSIA,
         "KBruteForce": KBruteForce,
+        "KGeometric": KGeometric
     }
 
     if estrategia not in estrategias:
@@ -39,10 +41,11 @@ def iniciar(
             f"Opciones: {list(estrategias.keys())}"
         )
     
-    if estrategias[estrategia] is KBruteForce:
-      analizador = estrategias[estrategia](gestor_sistema, config, k)
+    analizador: SIA
+    if estrategia in ("Phi", "KBruteForce"):
+        analizador = estrategias[estrategia](tpm, config, k)
     else:
-      analizador = estrategias[estrategia](gestor_sistema, config)
+        analizador = estrategias[estrategia](tpm, config)
     soluciones = analizador.aplicar_estrategia(
         estado_inicial,
         condiciones,

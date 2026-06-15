@@ -125,4 +125,4 @@ class TpmLoader:
 
         return filename
 
-#TpmLoader.generar(27)
+#TpmLoader.generar(14)

@@ -14,8 +14,7 @@ if not hasattr(collections, "MutableMapping"):
 if not hasattr(collections, "Sequence"):
     setattr(collections, "Sequence", Sequence)
 
-from pyphi import Network, Subsystem
-from pyphi.labels import NodeLabels
+import pyphi
 from src.config import Config
 from src.middlewares.slogger import SafeLogger
 from src.middlewares.profile import profiler_manager, profile
@@ -31,11 +30,18 @@ TAG_ANALYSIS = f"{LABEL}_analysis"
 
 
 class Phi(SIA):
-    def __init__(self, tpm: np.ndarray, config: Config):
+    def __init__(self, tpm: np.ndarray, config: Config, k: int = 2):
         super().__init__(tpm, config)
         profiler_manager.start_session(
             f"Phi{len(tpm[1])}{config.pagina_muestra}"
         )
+        self.k = k
+        match k:
+          case 3:
+            pyphi.config.PARTITION_TYPE = 'TRI'
+          case -1:
+            pyphi.config.PARTITION_TYPE = 'ALL'
+
         self.logger = SafeLogger(TAG_STRATEGY)
 
     @profile(context={"type": TAG_ANALYSIS})
@@ -48,15 +54,28 @@ class Phi(SIA):
     ):
         self.sia_preparar_subsistema(estado_inicial, condiciones, alcance, mecanismo)
 
+        futuros = self.sia_subsistema.indices_ncubos
+        presentes = self.sia_subsistema.dims_ncubos
+        m, n = futuros.size, presentes.size
+        if self.k > m + n:
+            return [Solution(
+                estrategia=LABEL,
+                perdida=float("inf"),
+                distribucion_subsistema=self.sia_dists_marginales,
+                distribucion_particion=self.sia_dists_marginales,
+                tiempo_ejecucion=time.time() - self.sia_tiempo_inicio,
+                particion=f"k={self.k} > m+n={m+n} (no v\u00e1lido)",
+            )]
+
         n_nodes = len(self.tpm[1])
-        node_labels = NodeLabels(
+        node_labels = pyphi.labels.NodeLabels(
             tuple(ABECEDARY[:n_nodes]),
             tuple(range(n_nodes)),
         )
 
-        network = Network(self.tpm, node_labels=node_labels)
+        network = pyphi.Network(self.tpm, node_labels=node_labels)
 
-        subsystem = Subsystem(
+        subsystem = pyphi.Subsystem(
             network=network,
             state=np.array([int(b) for b in estado_inicial]),
             nodes=range(n_nodes),

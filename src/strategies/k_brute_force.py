@@ -21,10 +21,10 @@ TAG_ANALYSIS = f"{LABEL}_analysis"
 
 
 class KBruteForce(SIA):
-    def __init__(self, tpm: np.ndarray, config: Config, k: int = 2):
+    def __init__(self, tpm: np.ndarray, config: Config, k: int = 3):
         super().__init__(tpm, config)
         profiler_manager.start_session(
-            f"KForce{len(tpm[1])}{config.pagina_muestra}_k{k}"
+            f"K{k}Force{len(tpm[1])}{config.pagina_muestra}"
         )
         self.k = k
         self.early_stopping = True
