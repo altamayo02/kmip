@@ -12,10 +12,10 @@ def fmt_kparticion(k_partition) -> str:
         alc_str = "".join(ABECEDARY[i] for i in sorted(alc)) if alc else VOID_STR
         labels.append((mech_str, alc_str))
 
-    widths = [max(len(m), len(a)) + 2 for m, a in labels]
-    top = "".join(f"\u239b{a:^{w}}\u239e" for (_, a), w in zip(labels, widths))
-    bot = "".join(f"\u239d{m:^{w}}\u23a0" for (m, _), w in zip(labels, widths))
-    return f"{top}\n{bot}"
+    parts = []
+    for m, a in labels:
+        parts.append(f"[{a}]({m})")
+    return " | ".join(parts)
 
 
 def fmt_biparticion_fuerza_bruta(
@@ -31,13 +31,7 @@ def fmt_biparticion_fuerza_bruta(
     purv_dual = "".join(ABECEDARY[i] for i in purv_d) if purv_d else VOID_STR
     mech_dual = "".join(LOWER_ABECEDARY[j] for j in mech_d) if mech_d else VOID_STR
 
-    width_prim = max(len(purv_prim), len(mech_prim)) + 2
-    width_dual = max(len(purv_dual), len(mech_dual)) + 2
-
-    return (
-        f"\u239b{purv_prim:^{width_prim}}\u239e\u239b{purv_dual:^{width_dual}}\u239e\n"
-        f"\u239d{mech_prim:^{width_prim}}\u23a0\u239d{mech_dual:^{width_dual}}\u23a0\n"
-    )
+    return f"[{purv_prim}]({mech_prim}) | [{purv_dual}]({mech_dual})"
 
 
 def fmt_biparticion_q(

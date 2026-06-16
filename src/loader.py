@@ -37,12 +37,18 @@ class TpmLoader:
                 )
         if tamaño > 20 and binaria:
             with open(filepath, "r") as fh:
-                first = fh.readline()
+                first = fh.readline().strip()
             is_multi = "," in first
             if is_multi:
                 return np.genfromtxt(filepath, delimiter=COLON_DELIM, dtype=np.uint8)
-            raw_str = np.genfromtxt(filepath, delimiter=COLON_DELIM, dtype=str)
-            raw = np.array([int(v, 16) for v in raw_str.ravel()], dtype=np.uint64)
+            # Columna única: cargar como enteros sin el paso intermedio de strings Python
+            is_hex = any(c in "abcdefABCDEF" for c in first)
+            base = 16 if is_hex else 10
+            if base == 16:
+                raw_str = np.genfromtxt(filepath, delimiter=COLON_DELIM, dtype=str)
+                raw = np.array([int(v, 16) for v in raw_str.ravel()], dtype=np.uint64)
+            else:
+                raw = np.loadtxt(filepath, dtype=np.uint64)
             n = tamaño
             num_states = raw.shape[0]
             result = np.zeros((num_states, n), dtype=np.uint8)

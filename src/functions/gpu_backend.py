@@ -18,31 +18,14 @@ import warnings
 
 HAS_CUPY = False
 HAS_GPU = False
-_HAS_HEADERS = False
 
-# Auto-detect CUDA headers from nvidia pip packages BEFORE importing CuPy
-_CUDA_HEADER_CANDIDATES = [
-    os.path.join(
-        os.environ.get("APPDATA", ""),
-        "Python",
-        f"Python{os.sys.version_info.major}{os.sys.version_info.minor}",
-        "site-packages",
-        "nvidia",
-        "cuda_runtime",
-        "include",
-    ),
-]
-
+# Auto-set CUDA_PATH from nvidia pip packages if not already set
 if not os.environ.get("CUDA_PATH"):
-    for candidate in _CUDA_HEADER_CANDIDATES:
-        if os.path.isfile(os.path.join(candidate, "cuda_runtime.h")):
-            # candidate = ...\nvidia\cuda_runtime\include
-            # CUDA_PATH should be parent of include = ...\nvidia\cuda_runtime
-            os.environ["CUDA_PATH"] = os.path.dirname(candidate)
-            _HAS_HEADERS = True
+    for _sp in __import__("sys").path:
+        _candidate = os.path.join(_sp, "nvidia", "cuda_runtime")
+        if os.path.isfile(os.path.join(_candidate, "include", "cuda_runtime.h")):
+            os.environ["CUDA_PATH"] = _candidate
             break
-else:
-    _HAS_HEADERS = True
 
 try:
     with warnings.catch_warnings():
@@ -50,14 +33,14 @@ try:
         import cupy as cp
     HAS_CUPY = True
 
-    if _HAS_HEADERS:
-        try:
-            _test = cp.array([1.0, 2.0])
-            _test + _test
-            _ = cp.mean(_test)
-            HAS_GPU = True
-        except Exception:
-            pass
+    # Quick GPU smoke test
+    try:
+        _test = cp.array([1.0, 2.0])
+        _test + _test
+        _ = cp.mean(_test)
+        HAS_GPU = True
+    except Exception:
+        pass
 
 except ImportError:
     pass
