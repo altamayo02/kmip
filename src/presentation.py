@@ -67,8 +67,7 @@ def mostrar_solucion(soluciones: list[Solution], config: Config) -> None:
 
 {Fore.YELLOW}Distribucion {tipo_distribucion} del Subsistema:
 {Style.RESET_ALL}{formatear_distribucion(solucion.distribucion_subsistema)}
-
-{Fore.YELLOW}Perdida minima ( {chr(966)} ) = {solucion.perdida:.4f}{Fore.WHITE}"""
+"""
 
     for i, sol in enumerate(soluciones):
         output += f"""
@@ -81,6 +80,8 @@ def mostrar_solucion(soluciones: list[Solution], config: Config) -> None:
 {Fore.MAGENTA}{sol.particion}{Style.RESET_ALL}"""
 
     output += f"""
+
+{Fore.YELLOW}Perdida minima ( {chr(966)} ) = {solucion.perdida:.4f}{Fore.WHITE}
 
 {Fore.BLUE}Tiempos de ejecucion:
 {Fore.WHITE}Horas: {tiempo_hrs} = Minutos: {tiempo_min} = Segundos: {tiempo_seg}

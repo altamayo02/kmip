@@ -157,6 +157,9 @@ class KGeometric(SIA, GeometricBase):
             influence, start,
         )
 
+        # ── Build mapping: real index → position ─────────────────────
+        v_index_map = {idx: pos for pos, idx in enumerate(v_indices)}
+
         # ── Families A+B fallback ─────────────────────────────────────
         family_b_feasible = (
             u >= self.k - 1
@@ -202,14 +205,14 @@ class KGeometric(SIA, GeometricBase):
             self._run_family_A(
                 u, v, u_indices, v_indices,
                 all_mech, all_alc, intact, cube_mean,
-                dist_cache, _update_best,
+                dist_cache, _update_best, v_index_map,
             )
 
         if best_emd > 0 and family_b_feasible:
             self._run_family_B(
                 u, v, u_indices, v_indices,
                 all_mech, all_alc, intact, cube_mean,
-                dist_cache, _update_best,
+                dist_cache, _update_best, v_index_map,
             )
 
         soluciones = []
@@ -230,7 +233,7 @@ class KGeometric(SIA, GeometricBase):
     def _run_family_A(
         self, u, v, u_indices, v_indices,
         all_mech, all_alc, intact, cube_mean,
-        dist_cache, update_best,
+        dist_cache, update_best, v_index_map,
     ):
         for combo in combinations(range(u + v), self.k - 1):
             sel_mech = frozenset(
@@ -257,7 +260,8 @@ class KGeometric(SIA, GeometricBase):
 
             dist = dist_cache[sel_mech].copy()
             for j in sel_alc:
-                dist[j] = cube_mean[j]
+                pos = v_index_map[j]
+                dist[pos] = cube_mean[pos]
 
             emd = emd_efecto(dist, intact)
             update_best(emd, kp, dist)
@@ -267,7 +271,7 @@ class KGeometric(SIA, GeometricBase):
     def _run_family_B(
         self, u, v, u_indices, v_indices,
         all_mech, all_alc, intact, cube_mean,
-        dist_cache, update_best,
+        dist_cache, update_best, v_index_map,
     ):
         k1 = self.k - 1
         for mech_combo in combinations(range(u), k1):
@@ -281,7 +285,7 @@ class KGeometric(SIA, GeometricBase):
                         m = u_indices[mech_combo[t]]
                         a = alc_vals[perm[t]]
                         groups.append((frozenset({m}), frozenset({a})))
-                        alc_override[a] = m
+                        alc_override[v_index_map[a]] = m
 
                     rem_mech = all_mech - mech_set
                     rem_alc = all_alc - frozenset(alc_vals)
@@ -291,8 +295,8 @@ class KGeometric(SIA, GeometricBase):
                     kp = tuple(groups)
 
                     dist = dist_cache[mech_set].copy()
-                    for a, m in alc_override.items():
-                        dist[a] = dist_cache[all_mech - frozenset({m})][a]
+                    for a_pos, m in alc_override.items():
+                        dist[a_pos] = dist_cache[all_mech - frozenset({m})][a_pos]
 
                     emd = emd_efecto(dist, intact)
                     update_best(emd, kp, dist)
