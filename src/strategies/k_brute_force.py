@@ -1,5 +1,6 @@
 import time
-from itertools import product
+from itertools import islice
+from math import ceil
 
 import numpy as np
 
@@ -10,9 +11,8 @@ from src.middlewares.slogger import SafeLogger
 from src.middlewares.profile import profiler_manager, profile
 from src.functions.emd import emd_efecto
 from src.functions.format import fmt_kparticion
+from src.functions.partitions import all_k_partitions_unlabeled
 from src.solution import Solution
-from itertools import islice
-from math import ceil
 
 
 LABEL = "KBruteForce"
@@ -49,7 +49,7 @@ class KBruteForce(SIA):
                     distribucion_subsistema=self.sia_dists_marginales,
                     distribucion_particion=self.sia_dists_marginales,
                     tiempo_ejecucion=time.time() - self.sia_tiempo_inicio,
-                    particion=f"k={self.k} > m={m} (no válido)",
+                    particion=f"k={self.k} > m={m} (no v\u00e1lido)",
                 )
             ]
 
@@ -57,7 +57,9 @@ class KBruteForce(SIA):
         mejores: list[dict] = []
         subsistema = self.sia_subsistema
 
-        for kp in _k_partitions_actual(futuros, presentes, self.k):
+        for kp in all_k_partitions_unlabeled(
+            list(presentes), list(futuros), self.k
+        ):
             part_dist = _k_partition_distribution(subsistema, kp)
             emd_value = self.distancia_metrica(part_dist, self.sia_dists_marginales)
 
@@ -72,10 +74,7 @@ class KBruteForce(SIA):
         seen = set()
         soluciones = []
         for mejor in mejores:
-            norm = _normalize_partition(mejor["particion"])
-            if norm in seen:
-                continue
-            seen.add(norm)
+            seen.add(mejor["particion"])
             fmt = fmt_kparticion(mejor["particion"])
             soluciones.append(
                 Solution(
@@ -89,49 +88,6 @@ class KBruteForce(SIA):
             )
 
         return soluciones
-
-def _normalize_partition(partition):
-  return tuple(
-    sorted(
-      (tuple(sorted(m)), tuple(sorted(a)))
-      for m, a in partition
-    )
-  )
-
-def _assignments_actual(elements: list, k: int):
-    """Assign actual elements to k labeled blocks; blocks may be empty."""
-    n = len(elements)
-    if n == 0:
-        yield [[] for _ in range(k)]
-        return
-    total = k ** n
-    for code in range(total):
-        blocks = [[] for _ in range(k)]
-        remaining = code
-        for e in elements:
-            blocks[remaining % k].append(e)
-            remaining //= k
-        yield blocks
-
-
-def _k_partitions_actual(alcance_indices, mecanismo_indices, k: int):
-    """Yield k-partitions using actual node/dim indices.
-    
-    Each partition is a tuple of k pairs (frozenset(mechanism), frozenset(alcance)).
-    """
-    alc_assign = _assignments_actual(list(alcance_indices), k)
-    mech_assign = _assignments_actual(list(mecanismo_indices), k)
-
-    total = k ** (len(alcance_indices) + len(mecanismo_indices))
-    for alc_blocks, mech_blocks in islice(
-        product(alc_assign, mech_assign), 0, ceil(total / 2)
-    ):
-        if any(not a and not b for a, b in zip(alc_blocks, mech_blocks)):
-            continue
-        yield tuple(
-            (frozenset(mech_blocks[i]), frozenset(alc_blocks[i]))
-            for i in range(k)
-        )
 
 
 def _marginal_from_cube(cube, initial_state: np.ndarray, keep_dims: set) -> float:
