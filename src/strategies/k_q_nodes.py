@@ -277,6 +277,9 @@ class KQNodes(SIA):
         if normalized in self.memo_evaluate:
             return self.memo_evaluate[normalized]
 
+        for cube in self.sia_subsistema.ncubos:
+            cube.memo.clear()
+
         kp = self._to_kpartition_tuple(groups)
         dist = k_partition_distribution(self.sia_subsistema, kp)
         emd = emd_efecto(dist, self.sia_dists_marginales)

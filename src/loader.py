@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 import time
 import os
@@ -37,22 +38,26 @@ class TpmLoader:
                 )
         if tamaño > 20 and binaria:
             n = tamaño
-            chunk_size = 200000
+            chunk_size = 50000
+            ncols = None
             parts = []
             with open(filepath, 'r') as f:
                 while True:
-                    lines = []
+                    buf = []
                     for _ in range(chunk_size):
                         line = f.readline()
                         if not line:
                             break
-                        lines.append(line.rstrip('\r\n'))
-                    if not lines:
+                        buf.append(line.rstrip('\r\n'))
+                    if not buf:
                         break
-                    text = ','.join(lines)
-                    vals = np.fromstring(text, sep=',', dtype=np.uint8).reshape(-1, n)
-                    parts.append(vals)
-            return np.vstack(parts) if len(parts) > 1 else parts[0]
+                    if ncols is None:
+                        ncols = len(buf[0].split(COLON_DELIM))
+                    part = np.fromstring(COLON_DELIM.join(buf), sep=COLON_DELIM, dtype=np.uint8).reshape(-1, ncols)
+                    parts.append(part)
+            if len(parts) == 1:
+                return parts[0]
+            return np.vstack(parts) if parts else np.empty((0, n), dtype=np.uint8)
         return np.genfromtxt(filepath, delimiter=COLON_DELIM)
 
     @staticmethod

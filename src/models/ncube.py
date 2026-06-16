@@ -54,7 +54,7 @@ class NCube:
                 dtype=np.int8,
             )
             self.memo[tuple(ejes)] = (
-                np.mean(self.data, axis=ejes_locales, keepdims=False),
+                np.mean(self.data, axis=ejes_locales, keepdims=False, dtype=np.float32),
                 new_dims,
             )
         return NCube(
