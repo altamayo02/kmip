@@ -36,6 +36,11 @@ class TpmLoader:
                     f"Buscado en: {SAMPLES_PATH.resolve()}, {alt_paths}"
                 )
         if tamaño > 20 and binaria:
+            with open(filepath, "r") as fh:
+                first = fh.readline()
+            is_multi = "," in first
+            if is_multi:
+                return np.genfromtxt(filepath, delimiter=COLON_DELIM, dtype=np.uint8)
             raw_str = np.genfromtxt(filepath, delimiter=COLON_DELIM, dtype=str)
             raw = np.array([int(v, 16) for v in raw_str.ravel()], dtype=np.uint64)
             n = tamaño
