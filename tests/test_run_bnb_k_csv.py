@@ -45,17 +45,16 @@ class TestLoad:
         csv_path = os.path.join(tmp_csv_dir, "test.csv")
         with open(csv_path, "w") as f:
             f.write(csv_content)
-        args = parse_args(["--file", csv_path, "--k", "3", "--initial-state", "111",
+        args = parse_args(["--file", csv_path, "--initial-state", "111",
                            "--mode", "exact"])
         assert args.file == csv_path
-        assert args.target_k == 3
 
     def test_dataset_load(self, tmp_csv_dir):
         csv_content = make_state_node_csv(3)
         csv_path = os.path.join(tmp_csv_dir, "N3A.csv")
         with open(csv_path, "w") as f:
             f.write(csv_content)
-        args = parse_args(["--dataset", "N3A", "--data-dir", tmp_csv_dir, "--k", "3"])
+        args = parse_args(["--dataset", "N3A", "--data-dir", tmp_csv_dir])
         assert args.dataset == "N3A"
         assert args.data_dir == tmp_csv_dir
 
@@ -146,7 +145,7 @@ class TestEndToEnd:
         script = os.path.join(os.path.dirname(__file__), "..", "scripts", "run_bnb_k_csv.py")
         result = subprocess.run(
             [sys.executable, "-X", "utf8", script,
-             "--file", csv_path, "--k", "3",
+             "--file", csv_path,
              "--initial-state", "111", "--mode", "exact",
              "--partition-space", "node_pairs",
              "--output-dir", tmp_csv_dir],
@@ -164,7 +163,7 @@ class TestEndToEnd:
         script = os.path.join(os.path.dirname(__file__), "..", "scripts", "run_bnb_k_csv.py")
         result = subprocess.run(
             [sys.executable, "-X", "utf8", script,
-             "--file", csv_path, "--k", "3",
+             "--file", csv_path,
              "--initial-state", "ones", "--mode", "heuristic",
              "--partition-space", "node_pairs",
              "--output-dir", tmp_csv_dir],
@@ -172,7 +171,7 @@ class TestEndToEnd:
             cwd=os.path.dirname(__file__) + "/..",
         )
         assert result.returncode == 0, f"STDERR: {result.stderr}"
-        assert "optimality_certified: NO" in result.stdout
+        assert "SUMMARY" in result.stdout
 
 
 if __name__ == "__main__":

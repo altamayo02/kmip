@@ -2,9 +2,9 @@
 """
 Branch and Bound k-partition runner for CSV TPM files.
 
-Usage:
-  uv run python -X utf8 scripts/run_bnb_k_csv.py --dataset N6A --data-dir data/samples --k 5 --initial-state 100000 --objective final_phi --mode exact --partition-space nodes
-  uv run python -X utf8 scripts/run_bnb_k_csv.py --dataset N6A --data-dir data/samples --k 5 --initial-state 100000 --objective final_phi --mode heuristic --generators selection --beam-width 50
+ Usage:
+   uv run python -X utf8 scripts/run_bnb_k_csv.py --dataset N6A --data-dir data/samples --initial-state 100000 --objective final_phi --mode exact --partition-space nodes
+   uv run python -X utf8 scripts/run_bnb_k_csv.py --dataset N6A --data-dir data/samples --initial-state 100000 --objective final_phi --mode heuristic --generators selection --beam-width 50
 """
 
 import argparse
@@ -119,7 +119,6 @@ def parse_args(argv=None) -> argparse.Namespace:
     src.add_argument("--dataset", type=str, help="Dataset name like N3A, N17A")
     src.add_argument("--file", type=str, help="Direct path to CSV file")
     p.add_argument("--data-dir", type=str, default="data")
-    p.add_argument("--k", type=int, default=5, dest="target_k")
     p.add_argument("--initial-state", type=str, default="ones")
     p.add_argument("--metric", type=str, default="emd_effect",
                    choices=["emd_effect", "emd_causal"])
@@ -185,139 +184,153 @@ def main():
     istr = "".join(str(int(b)) for b in init)
     print(f"  initial_state: {istr}")
 
-    if args.target_k > n_sv:
-        print(f"ERROR: k={args.target_k} > n_search_vars={n_sv}")
-        sys.exit(1)
+    # ── Run for k=2, 3, 4, 5 ──────────────────────────────────────────────
+    k_values = [2, 3, 4, 5]
+    all_results: dict[int, SearchReport] = {}
 
-    # Check viability for exact final_phi
-    if args.objective == "final_phi" and args.mode == "exact":
-        total_parts = count_stirling(n_sv, args.target_k)
-        print(f"  total_set_partitions: {total_parts}")
-        if total_parts > 500_000:
-            print(f"ERROR: Too many set partitions ({total_parts}). "
-                  f"Use --mode heuristic or reduce k/n.")
-            sys.exit(1)
+    for target_k in k_values:
+        if target_k > n_sv:
+            print(f"\n  SKIP k={target_k}: k > n_search_vars={n_sv}")
+            continue
+        print(f"\n  ── k={target_k} ──")
 
-    gens = tuple(g.strip() for g in args.generators.split(","))
-    config = BnBConfig(
-        target_k=args.target_k,
-        partition_space=args.partition_space,
-        objective=args.objective,
-        mode=args.mode,
-        generators=gens,
-        top_l_per_generator=args.top_l_per_generator,
-        beam_width=args.beam_width,
-        max_nodes=args.max_nodes,
-        timeout_seconds=args.timeout_seconds,
-    )
+        # Check viability for exact final_phi
+        if args.objective == "final_phi" and args.mode == "exact":
+            total_parts = count_stirling(n_sv, target_k)
+            print(f"  total_set_partitions: {total_parts}")
+            if total_parts > 500_000:
+                print(f"  SKIP k={target_k}: Too many set partitions ({total_parts}). "
+                      f"Use --mode heuristic or reduce n.")
+                continue
 
-    # Set max_expansion_candidates_per_node ONLY from CLI (default = 0 for final_phi)
-    if args.max_expansion_candidates_per_node is not None:
-        config.max_expansion_candidates_per_node = args.max_expansion_candidates_per_node
-    elif args.objective == "accumulated_path":
-        config.max_expansion_candidates_per_node = 100  # default for BnB mode
-    else:
-        config.max_expansion_candidates_per_node = 0  # auto-detect (enum or beam)
-
-    # For heuristic, set beam width
-    if args.mode == "heuristic" and args.objective == "final_phi":
-        config.max_expansion_candidates_per_node = 0
-        if n_nodes >= 10:
-            config.beam_width = min(config.beam_width, 30)
-        if n_nodes >= 17:
-            config.beam_width = min(config.beam_width, 10)
-
-    # Determine algorithm name
-    algo_name = (
-        "exact_enumeration" if args.objective == "final_phi" and args.mode == "exact" else
-        "beam_search" if args.objective == "final_phi" and args.mode == "heuristic" else
-        "accumulated_path_bnb"
-    )
-
-    print(f"  generators: {config.generators}")
-    print(f"  beam_width: {config.beam_width}")
-    print(f"  max_expansion_per_node: {config.max_expansion_candidates_per_node}")
-    print()
-
-    # Run
-    print("Running...")
-    clear_caches()
-    _reset_nid()
-    start = time.time()
-    result = branch_and_bound_k_from_state_node_tpm(
-        state_node_tpm=sn, target_k=args.target_k,
-        initial_state=init, metric=args.metric,
-        config=config, verbose=args.verbose,
-        dataset_name=dset, csv_path=csvs,
-    )
-    elapsed = time.time() - start
-
-    # Recompute certification
-    result.mode = args.mode
-    if args.objective == "final_phi" and args.mode == "exact":
-        result.optimality_certified = True
-        result.termination_reason = "exhausted_all_final_partitions"
-    elif args.objective == "final_phi":
-        result.optimality_certified = False
-    else:
-        result.optimality_certified = (
-            args.objective == "accumulated_path"
-            and args.mode == "exact"
-            and result.termination_reason == "queue_exhausted"
-            and config.max_nodes is None
-            and config.timeout_seconds is None
-            and config.max_expansion_candidates_per_node == 0
+        gens = tuple(g.strip() for g in args.generators.split(","))
+        config = BnBConfig(
+            target_k=target_k,
+            partition_space=args.partition_space,
+            objective=args.objective,
+            mode=args.mode,
+            generators=gens,
+            top_l_per_generator=args.top_l_per_generator,
+            beam_width=args.beam_width,
+            max_nodes=args.max_nodes,
+            timeout_seconds=args.timeout_seconds,
         )
 
-    # Print result
-    print()
-    print("=" * 65)
-    print("  RESULTS")
-    print("=" * 65)
-    print(f"  Dataset:              {dset}")
-    print(f"  CSV:                  {csvs}")
-    print(f"  n_nodes:              {n_nodes}")
-    print(f"  n_search_vars:        {n_sv}")
-    print(f"  target_k:             {args.target_k}")
-    print(f"  initial_state:        {istr}")
-    print(f"  partition_space:      {args.partition_space}")
-    print(f"  objective:            {args.objective}")
-    print(f"  mode:                 {args.mode}")
-    print(f"  generators:           {','.join(result.generators)}")
-    print(f"  algorithm:            {algo_name}")
-    print(f"  incumbent_source:     {result.incumbent_source}")
-    print(f"  optimality_certified: {'YES' if result.optimality_certified else 'NO'}")
-    print()
-    print(f"  Best partition ({len(result.best_partition)} blocks):")
-    print(f"    {result.best_partition_labels_str}")
-    print()
-    assert len(result.best_partition) == args.target_k, (
-        f"BUG: result has {len(result.best_partition)} blocks, expected {args.target_k}"
-    )
-    if args.objective == "final_phi":
-        print(f"  Best final phi:        {result.best_final_phi:.6f}")
-        print(f"  Path accumulated loss: {result.best_accumulated_loss:.6f} (diagnostic)")
-    else:
-        print(f"  Best accumulated loss: {result.best_accumulated_loss:.6f}")
-        print(f"  Final phi:             {result.best_final_phi:.6f} (diagnostic)")
-    print()
-    print("  Metrics:")
-    print(f"    partitions evaluated:  {result.nodes_created}")
-    if result.nodes_expanded:
-        print(f"    partial_candidates:    {result.nodes_expanded}")
-    if result.complete_nodes_found:
-        print(f"    complete_partitions:   {result.complete_nodes_found}")
-    print(f"    incumbent_updates:     {result.incumbent_updates}")
-    print(f"    runtime:               {elapsed:.4f}s")
-    print(f"    termination_reason:    {result.termination_reason}")
+        if args.max_expansion_candidates_per_node is not None:
+            config.max_expansion_candidates_per_node = args.max_expansion_candidates_per_node
+        elif args.objective == "accumulated_path":
+            config.max_expansion_candidates_per_node = 100
+        else:
+            config.max_expansion_candidates_per_node = 0
 
-    # Save
-    label = f"{dset}_k{args.target_k}_{args.objective}_{istr}_{args.partition_space}"
-    try:
-        save_results(result, args.output_dir, label)
-    except Exception as e:
-        print(f"  WARNING: save failed: {e}")
-    print()
+        if args.mode == "heuristic" and args.objective == "final_phi":
+            config.max_expansion_candidates_per_node = 0
+            if n_nodes >= 10:
+                config.beam_width = min(config.beam_width, 30)
+            if n_nodes >= 17:
+                config.beam_width = min(config.beam_width, 10)
+
+        algo_name = (
+            "exact_enumeration" if args.objective == "final_phi" and args.mode == "exact" else
+            "beam_search" if args.objective == "final_phi" and args.mode == "heuristic" else
+            "accumulated_path_bnb"
+        )
+
+        print(f"  generators: {config.generators}")
+        print(f"  beam_width: {config.beam_width}")
+        print(f"  max_expansion_per_node: {config.max_expansion_candidates_per_node}")
+
+        print("  Running...")
+        clear_caches()
+        _reset_nid()
+        start_k = time.time()
+        result = branch_and_bound_k_from_state_node_tpm(
+            state_node_tpm=sn, target_k=target_k,
+            initial_state=init, metric=args.metric,
+            config=config, verbose=args.verbose,
+            dataset_name=dset, csv_path=csvs,
+        )
+        elapsed_k = time.time() - start_k
+
+        result.mode = args.mode
+        if args.objective == "final_phi" and args.mode == "exact":
+            result.optimality_certified = True
+            result.termination_reason = "exhausted_all_final_partitions"
+        elif args.objective == "final_phi":
+            result.optimality_certified = False
+        else:
+            result.optimality_certified = (
+                args.objective == "accumulated_path"
+                and args.mode == "exact"
+                and result.termination_reason == "queue_exhausted"
+                and config.max_nodes is None
+                and config.timeout_seconds is None
+                and config.max_expansion_candidates_per_node == 0
+            )
+
+        # Print result for this k
+        print()
+        print("=" * 65)
+        print(f"  RESULTS (k={target_k})")
+        print("=" * 65)
+        print(f"  Dataset:              {dset}")
+        print(f"  CSV:                  {csvs}")
+        print(f"  n_nodes:              {n_nodes}")
+        print(f"  n_search_vars:        {n_sv}")
+        print(f"  target_k:             {target_k}")
+        print(f"  initial_state:        {istr}")
+        print(f"  partition_space:      {args.partition_space}")
+        print(f"  objective:            {args.objective}")
+        print(f"  mode:                 {args.mode}")
+        print(f"  generators:           {','.join(result.generators)}")
+        print(f"  algorithm:            {algo_name}")
+        print(f"  incumbent_source:     {result.incumbent_source}")
+        print(f"  optimality_certified: {'YES' if result.optimality_certified else 'NO'}")
+        print()
+        print(f"  Best partition ({len(result.best_partition)} blocks):")
+        print(f"    {result.best_partition_labels_str}")
+        print()
+        assert len(result.best_partition) == target_k, (
+            f"BUG: result has {len(result.best_partition)} blocks, expected {target_k}"
+        )
+        if args.objective == "final_phi":
+            print(f"  Best final phi:        {result.best_final_phi:.6f}")
+            print(f"  Path accumulated loss: {result.best_accumulated_loss:.6f} (diagnostic)")
+        else:
+            print(f"  Best accumulated loss: {result.best_accumulated_loss:.6f}")
+            print(f"  Final phi:             {result.best_final_phi:.6f} (diagnostic)")
+        print()
+        print("  Metrics:")
+        print(f"    partitions evaluated:  {result.nodes_created}")
+        if result.nodes_expanded:
+            print(f"    partial_candidates:    {result.nodes_expanded}")
+        if result.complete_nodes_found:
+            print(f"    complete_partitions:   {result.complete_nodes_found}")
+        print(f"    incumbent_updates:     {result.incumbent_updates}")
+        print(f"    runtime:               {elapsed_k:.4f}s")
+        print(f"    termination_reason:    {result.termination_reason}")
+
+        label = f"{dset}_k{target_k}_{args.objective}_{istr}_{args.partition_space}"
+        try:
+            save_results(result, args.output_dir, label)
+        except Exception as e:
+            print(f"  WARNING: save failed: {e}")
+        print()
+
+        all_results[target_k] = result
+
+    # ── Summary ──────────────────────────────────────────────────────────
+    if all_results:
+        print("=" * 65)
+        print("  SUMMARY")
+        print("=" * 65)
+        for k, r in sorted(all_results.items()):
+            print(f"  k={k}:  phi={r.best_final_phi:.6f}  "
+                  f"acc_loss={r.best_accumulated_loss:.6f}  "
+                  f"runtime={r.runtime_seconds:.4f}s  "
+                  f"blocks={len(r.best_partition)}")
+            print(f"    partition: {r.best_partition_labels_str}")
+        print()
     print("Done.")
 
 
