@@ -8,6 +8,7 @@ from src.strategies.phi import Phi
 from strategies.k_brute_force import KBruteForce
 from strategies.k_brute_force_parallel import KBruteForceParallel
 from src.strategies.k_geometric import KGeometric
+from src.strategies.k_q_nodes import KQNodes
 from src.presentation import mostrar_solucion
 from src.strategies.base import SIA
 
@@ -35,6 +36,7 @@ def iniciar(
         "KBruteForce": KBruteForce,
         "KBruteForceP": KBruteForceParallel,
         "KGeometric": KGeometric,
+        "KQNodes": KQNodes,
     }
 
     if estrategia not in estrategias:
@@ -44,7 +46,7 @@ def iniciar(
         )
     
     analizador: SIA
-    if estrategia in ("Phi", "KBruteForce", "KBruteForceP", "KGeometric"):
+    if estrategia in ("Phi", "KBruteForce", "KBruteForceP", "KGeometric", "KQNodes"):
         analizador = estrategias[estrategia](tpm, config, k)
     else:
         analizador = estrategias[estrategia](tpm, config)
