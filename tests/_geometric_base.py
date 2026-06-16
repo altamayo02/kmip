@@ -1,3 +1,4 @@
+import multiprocessing as mp
 import os
 import sys
 import time
@@ -47,6 +48,17 @@ K_COLUMNS = {
 }
 
 
+def _worker_k(args):
+    N, page, estado_inicial, alcance_mask, mecanismo_mask, condiciones_mask, k = args
+    try:
+        particion_str, perdida, elapsed = run_scenario(
+            N, page, estado_inicial, alcance_mask, mecanismo_mask, condiciones_mask, k
+        )
+        return k, particion_str, perdida, elapsed, None
+    except Exception as e:
+        return k, None, None, None, str(e)
+
+
 def process_sheet(excel_path, sheet_name, N, page):
     wb = openpyxl.load_workbook(excel_path)
     ws = wb[sheet_name]
@@ -56,42 +68,39 @@ def process_sheet(excel_path, sheet_name, N, page):
     condiciones_mask = "1" * N
 
     total_scenarios = 0
-    for row in range(6, 56):
-        alcance_letters = ws[f"B{row}"].value
-        mecanismo_letters = ws[f"C{row}"].value
 
-        if alcance_letters is None or mecanismo_letters is None:
-            break
+    with mp.Pool(processes=4) as pool:
+        for row in range(6, 56):
+            alcance_letters = ws[f"B{row}"].value
+            mecanismo_letters = ws[f"C{row}"].value
 
-        total_scenarios += 1
-        alcance_mask = letters_to_mask(sistema, alcance_letters)
-        mecanismo_mask = letters_to_mask(sistema, mecanismo_letters)
+            if alcance_letters is None or mecanismo_letters is None:
+                break
 
-        print(f"\n[{total_scenarios:2d}] Row {row}:")
-        print(f"     alcance={alcance_letters} ({len(alcance_letters)}ch)")
-        print(f"     mecanismo={mecanismo_letters} ({len(mecanismo_letters)}ch)")
+            total_scenarios += 1
+            alcance_mask = letters_to_mask(sistema, alcance_letters)
+            mecanismo_mask = letters_to_mask(sistema, mecanismo_letters)
 
-        for k in (2, 3, 4, 5):
-            part_col, loss_col, time_col = K_COLUMNS[k]
+            print(f"\n[{total_scenarios:2d}] Row {row}:")
+            print(f"     alcance={alcance_letters} ({len(alcance_letters)}ch)")
+            print(f"     mecanismo={mecanismo_letters} ({len(mecanismo_letters)}ch)")
 
-            try:
-                particion_str, perdida, elapsed = run_scenario(
-                    N, page,
-                    estado_inicial, alcance_mask, mecanismo_mask,
-                    condiciones_mask, k,
-                )
+            k_tasks = [(N, page, estado_inicial, alcance_mask, mecanismo_mask, condiciones_mask, k)
+                       for k in (2, 3, 4, 5)]
+            k_results = pool.map(_worker_k, k_tasks)
 
-                ws.cell(row=row, column=part_col, value=particion_str)
-                ws.cell(row=row, column=loss_col, value=perdida)
-                ws.cell(row=row, column=time_col, value=round(elapsed, 6))
-
-                print(f"     k={k}: phi={perdida:.6f}  t={elapsed:.4f}s")
-
-            except Exception as e:
-                print(f"     k={k}: ERROR - {e}")
-                ws.cell(row=row, column=part_col, value=f"ERROR: {e}")
-                ws.cell(row=row, column=loss_col, value=None)
-                ws.cell(row=row, column=time_col, value=None)
+            for k, particion_str, perdida, elapsed, error in k_results:
+                part_col, loss_col, time_col = K_COLUMNS[k]
+                if error:
+                    print(f"     k={k}: ERROR - {error}")
+                    ws.cell(row=row, column=part_col, value=f"ERROR: {error}")
+                    ws.cell(row=row, column=loss_col, value=None)
+                    ws.cell(row=row, column=time_col, value=None)
+                else:
+                    ws.cell(row=row, column=part_col, value=particion_str)
+                    ws.cell(row=row, column=loss_col, value=perdida)
+                    ws.cell(row=row, column=time_col, value=round(elapsed, 6))
+                    print(f"     k={k}: phi={perdida:.6f}  t={elapsed:.4f}s")
 
     wb.save(excel_path)
     print(f"\nProcesados {total_scenarios} escenarios. Guardado: {excel_path}")
