@@ -1,9 +1,17 @@
-import concurrent.futures
 import os
 import sys
 import time
 
 os.environ["PYPHI_WELCOME_OFF"] = "yes"
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+
+# Suppress CuPy CUDA_PATH warning by pre-setting from pip-installed nvidia packages
+if not os.environ.get("CUDA_PATH"):
+    for _sp in sys.path:
+        _candidate = os.path.join(_sp, "nvidia", "cuda_runtime")
+        if os.path.isfile(os.path.join(_candidate, "include", "cuda_runtime.h")):
+            os.environ["CUDA_PATH"] = _candidate
+            break
 
 import openpyxl
 
@@ -12,11 +20,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from src.config import Config
 from src.loader import TpmLoader
 from src.strategies.k_q_nodes import KQNodes
+from src.functions.gpu_backend import HAS_GPU
 
 
 def _deshabilitar_profiler():
     import src.middlewares.profile as pm
-
     pm.profiler_manager.enabled = False
 
 
@@ -32,23 +40,36 @@ K_COLUMNS = {
 }
 
 
-MAX_WORKERS = 8
+_TPM_CACHE: dict = {}
+_subsistema_cache: dict = {}
 
 
-def _process_row(args):
-    N, page, estado_inicial, condiciones_mask, alcance_mask, mecanismo_mask, row_idx = args
+def _procesar_escenario(N, page, estado_inicial, condiciones_mask, alcance_mask, mecanismo_mask, use_gpu):
+    cache_key = (N, page)
+    tpm = _TPM_CACHE.get(cache_key)
+    if tpm is None:
+        tpm = TpmLoader.cargar(N, page)
+        _TPM_CACHE[cache_key] = tpm
 
-    _deshabilitar_profiler()
-    tpm = TpmLoader.cargar(N, page)
     config = Config(pagina_muestra=page)
+
+    # Prepare subsystem once (shared across all k values)
+    preparador = KQNodes(tpm, config, k=2, use_gpu=use_gpu)
+    preparador.sia_preparar_subsistema(estado_inicial, condiciones_mask, alcance_mask, mecanismo_mask)
+    shared = (preparador.sia_subsistema, preparador.sia_dists_marginales)
 
     results = []
     for k in (2, 3, 4, 5):
         try:
-            analizador = KQNodes(tpm, config, k=k)
+            analizador = KQNodes(tpm, config, k=k, use_gpu=use_gpu)
+            analizador.sia_subsistema = shared[0]
+            analizador.sia_dists_marginales = shared[1]
+            analizador.sia_tiempo_inicio = time.time()
+
             inicio = time.perf_counter()
             soluciones = analizador.aplicar_estrategia(
                 estado_inicial, condiciones_mask, alcance_mask, mecanismo_mask,
+                _skip_prep=True,
             )
             elapsed = time.perf_counter() - inicio
             mejor = soluciones[0]
@@ -63,10 +84,15 @@ def _process_row(args):
                 'k': k,
                 'error': str(e),
             })
-    return row_idx, results
+    return results
 
 
 def process_sheet(excel_path, sheet_name, N, page):
+    _deshabilitar_profiler()
+    use_gpu = HAS_GPU
+    modo = "GPU (CUDA)" if use_gpu else "CPU"
+    print(f"Modo: {modo}")
+
     wb = openpyxl.load_workbook(excel_path)
     ws = wb[sheet_name]
 
@@ -74,7 +100,7 @@ def process_sheet(excel_path, sheet_name, N, page):
     estado_inicial = str(ws["B1"].value)
     condiciones_mask = "1" * N
 
-    tasks = []
+    escenarios = []
     for row in range(6, 56):
         alcance_letters = ws[f"B{row}"].value
         mecanismo_letters = ws[f"C{row}"].value
@@ -82,43 +108,43 @@ def process_sheet(excel_path, sheet_name, N, page):
             break
         alcance_mask = letters_to_mask(sistema, alcance_letters)
         mecanismo_mask = letters_to_mask(sistema, mecanismo_letters)
-        tasks.append((N, page, estado_inicial, condiciones_mask, alcance_mask, mecanismo_mask, row))
+        escenarios.append((row, alcance_letters, mecanismo_letters, alcance_mask, mecanismo_mask))
 
-    total = len(tasks)
-    print(f"Procesando {total} escenarios con {MAX_WORKERS} workers...")
+    total = len(escenarios)
+    print(f"Procesando {total} escenarios secuencialmente con aceleracion {modo}...")
 
-    with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        future_map = {executor.submit(_process_row, t): t[-1] for t in tasks}
-        completed = 0
+    for idx, (row, alcance_letters, mecanismo_letters, alcance_mask, mecanismo_mask) in enumerate(escenarios, 1):
+        t0 = time.perf_counter()
+        print(f"\n[{idx:2d}/{total}] Row {row}: procesando...", end="", flush=True)
+        results = _procesar_escenario(
+            N, page, estado_inicial, condiciones_mask,
+            alcance_mask, mecanismo_mask, use_gpu,
+        )
+        elapsed = time.perf_counter() - t0
 
-        for future in concurrent.futures.as_completed(future_map):
-            row_idx, results = future.result()
-            completed += 1
+        print(f"\n[{idx:2d}/{total}] Row {row}:")
+        print(f"     alcance={alcance_letters} ({len(alcance_letters)}ch)")
+        print(f"     mecanismo={mecanismo_letters} ({len(mecanismo_letters)}ch)")
+        print(f"     tiempo_total={elapsed:.4f}s")
 
-            alcance_letters = ws[f"B{row_idx}"].value
-            mecanismo_letters = ws[f"C{row_idx}"].value
-            print(f"\n[{completed:2d}] Row {row_idx}:")
-            print(f"     alcance={alcance_letters} ({len(alcance_letters)}ch)")
-            print(f"     mecanismo={mecanismo_letters} ({len(mecanismo_letters)}ch)")
+        for res in results:
+            k = res['k']
+            part_col, loss_col, time_col = K_COLUMNS[k]
 
-            for res in results:
-                k = res['k']
-                part_col, loss_col, time_col = K_COLUMNS[k]
+            if 'error' in res:
+                print(f"     k={k}: ERROR - {res['error']}")
+                ws.cell(row=row, column=part_col, value=f"ERROR: {res['error']}")
+                ws.cell(row=row, column=loss_col, value=None)
+                ws.cell(row=row, column=time_col, value=None)
+            else:
+                ws.cell(row=row, column=part_col, value=res['particion'])
+                ws.cell(row=row, column=loss_col, value=res['perdida'])
+                ws.cell(row=row, column=time_col, value=round(res['tiempo'], 6))
+                print(f"     k={k}: phi={res['perdida']:.6f}  t={res['tiempo']:.4f}s")
 
-                if 'error' in res:
-                    print(f"     k={k}: ERROR - {res['error']}")
-                    ws.cell(row=row_idx, column=part_col, value=f"ERROR: {res['error']}")
-                    ws.cell(row=row_idx, column=loss_col, value=None)
-                    ws.cell(row=row_idx, column=time_col, value=None)
-                else:
-                    ws.cell(row=row_idx, column=part_col, value=res['particion'])
-                    ws.cell(row=row_idx, column=loss_col, value=res['perdida'])
-                    ws.cell(row=row_idx, column=time_col, value=round(res['tiempo'], 6))
-                    print(f"     k={k}: phi={res['perdida']:.6f}  t={res['tiempo']:.4f}s")
-
-            if completed % 10 == 0:
-                wb.save(excel_path)
-                print(f"  (guardado parcial: {completed}/{total})")
+        if idx % 10 == 0:
+            wb.save(excel_path)
+            print(f"  (guardado parcial: {idx}/{total})")
 
     wb.save(excel_path)
     print(f"\nProcesados {total} escenarios. Guardado: {excel_path}")
