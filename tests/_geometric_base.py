@@ -1,3 +1,4 @@
+import concurrent.futures
 import os
 import sys
 import time
@@ -23,28 +24,47 @@ def letters_to_mask(sistema: str, subset: str) -> str:
     return "".join("1" if ch in subset else "0" for ch in sistema)
 
 
-def run_scenario(N, page, estado_inicial, alcance_mask, mecanismo_mask, condiciones_mask, k):
-    _deshabilitar_profiler()
-    tpm = TpmLoader.cargar(N, page)
-    config = Config(pagina_muestra=page)
-    analizador = KGeometric(tpm, config, k=k)
-
-    inicio = time.perf_counter()
-    soluciones = analizador.aplicar_estrategia(
-        estado_inicial, condiciones_mask, alcance_mask, mecanismo_mask,
-    )
-    elapsed = time.perf_counter() - inicio
-
-    mejor = soluciones[0]
-    return mejor.particion, float(mejor.perdida), elapsed
-
-
 K_COLUMNS = {
     2: (7, 8, 9),
     3: (13, 14, 15),
     4: (19, 20, 21),
     5: (25, 26, 27),
 }
+
+
+MAX_WORKERS = 8
+
+
+def _process_row(args):
+    """Process one row (all k=2,3,4,5) in a worker process."""
+    N, page, estado_inicial, condiciones_mask, alcance_mask, mecanismo_mask, row_idx = args
+
+    _deshabilitar_profiler()
+    tpm = TpmLoader.cargar(N, page)
+    config = Config(pagina_muestra=page)
+
+    results = []
+    for k in (2, 3, 4, 5):
+        try:
+            analizador = KGeometric(tpm, config, k=k)
+            inicio = time.perf_counter()
+            soluciones = analizador.aplicar_estrategia(
+                estado_inicial, condiciones_mask, alcance_mask, mecanismo_mask,
+            )
+            elapsed = time.perf_counter() - inicio
+            mejor = soluciones[0]
+            results.append({
+                'k': k,
+                'particion': mejor.particion,
+                'perdida': float(mejor.perdida),
+                'tiempo': elapsed,
+            })
+        except Exception as e:
+            results.append({
+                'k': k,
+                'error': str(e),
+            })
+    return row_idx, results
 
 
 def process_sheet(excel_path, sheet_name, N, page):
@@ -55,43 +75,51 @@ def process_sheet(excel_path, sheet_name, N, page):
     estado_inicial = str(ws["B1"].value)
     condiciones_mask = "1" * N
 
-    total_scenarios = 0
+    tasks = []
     for row in range(6, 56):
         alcance_letters = ws[f"B{row}"].value
         mecanismo_letters = ws[f"C{row}"].value
-
         if alcance_letters is None or mecanismo_letters is None:
             break
-
-        total_scenarios += 1
         alcance_mask = letters_to_mask(sistema, alcance_letters)
         mecanismo_mask = letters_to_mask(sistema, mecanismo_letters)
+        tasks.append((N, page, estado_inicial, condiciones_mask, alcance_mask, mecanismo_mask, row))
 
-        print(f"\n[{total_scenarios:2d}] Row {row}:")
-        print(f"     alcance={alcance_letters} ({len(alcance_letters)}ch)")
-        print(f"     mecanismo={mecanismo_letters} ({len(mecanismo_letters)}ch)")
+    total = len(tasks)
+    print(f"Procesando {total} escenarios con {MAX_WORKERS} workers...")
 
-        for k in (2, 3, 4, 5):
-            part_col, loss_col, time_col = K_COLUMNS[k]
+    with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        future_map = {executor.submit(_process_row, t): t[-1] for t in tasks}
+        completed = 0
 
-            try:
-                particion_str, perdida, elapsed = run_scenario(
-                    N, page,
-                    estado_inicial, alcance_mask, mecanismo_mask,
-                    condiciones_mask, k,
-                )
+        for future in concurrent.futures.as_completed(future_map):
+            row_idx, results = future.result()
+            completed += 1
 
-                ws.cell(row=row, column=part_col, value=particion_str)
-                ws.cell(row=row, column=loss_col, value=perdida)
-                ws.cell(row=row, column=time_col, value=round(elapsed, 6))
+            alcance_letters = ws[f"B{row_idx}"].value
+            mecanismo_letters = ws[f"C{row_idx}"].value
+            print(f"\n[{completed:2d}] Row {row_idx}:")
+            print(f"     alcance={alcance_letters} ({len(alcance_letters)}ch)")
+            print(f"     mecanismo={mecanismo_letters} ({len(mecanismo_letters)}ch)")
 
-                print(f"     k={k}: phi={perdida:.6f}  t={elapsed:.4f}s")
+            for res in results:
+                k = res['k']
+                part_col, loss_col, time_col = K_COLUMNS[k]
 
-            except Exception as e:
-                print(f"     k={k}: ERROR - {e}")
-                ws.cell(row=row, column=part_col, value=f"ERROR: {e}")
-                ws.cell(row=row, column=loss_col, value=None)
-                ws.cell(row=row, column=time_col, value=None)
+                if 'error' in res:
+                    print(f"     k={k}: ERROR - {res['error']}")
+                    ws.cell(row=row_idx, column=part_col, value=f"ERROR: {res['error']}")
+                    ws.cell(row=row_idx, column=loss_col, value=None)
+                    ws.cell(row=row_idx, column=time_col, value=None)
+                else:
+                    ws.cell(row=row_idx, column=part_col, value=res['particion'])
+                    ws.cell(row=row_idx, column=loss_col, value=res['perdida'])
+                    ws.cell(row=row_idx, column=time_col, value=round(res['tiempo'], 6))
+                    print(f"     k={k}: phi={res['perdida']:.6f}  t={res['tiempo']:.4f}s")
+
+            if completed % 10 == 0:
+                wb.save(excel_path)
+                print(f"  (guardado parcial: {completed}/{total})")
 
     wb.save(excel_path)
-    print(f"\nProcesados {total_scenarios} escenarios. Guardado: {excel_path}")
+    print(f"\nProcesados {total} escenarios. Guardado: {excel_path}")
