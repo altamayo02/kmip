@@ -36,14 +36,23 @@ class TpmLoader:
                     f"Buscado en: {SAMPLES_PATH.resolve()}, {alt_paths}"
                 )
         if tamaño > 20 and binaria:
-            raw_str = np.genfromtxt(filepath, delimiter=COLON_DELIM, dtype=str)
-            raw = np.array([int(v, 16) for v in raw_str.ravel()], dtype=np.uint64)
             n = tamaño
-            num_states = raw.shape[0]
-            result = np.zeros((num_states, n), dtype=np.uint8)
-            for col in range(n):
-                result[:, col] = (raw >> col) & 1
-            return result
+            chunk_size = 200000
+            parts = []
+            with open(filepath, 'r') as f:
+                while True:
+                    lines = []
+                    for _ in range(chunk_size):
+                        line = f.readline()
+                        if not line:
+                            break
+                        lines.append(line.rstrip('\r\n'))
+                    if not lines:
+                        break
+                    text = ','.join(lines)
+                    vals = np.fromstring(text, sep=',', dtype=np.uint8).reshape(-1, n)
+                    parts.append(vals)
+            return np.vstack(parts) if len(parts) > 1 else parts[0]
         return np.genfromtxt(filepath, delimiter=COLON_DELIM)
 
     @staticmethod
