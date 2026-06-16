@@ -5,6 +5,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from _geometric_base import process_sheet
 
+EXCEL = os.path.join(os.path.dirname(__file__), "..", "data/evaluation/MIKP - Datos Prueba.xlsx")
 if __name__ == "__main__":
-    EXCEL = os.path.join(os.path.dirname(__file__), "..", "data/evaluation/MIKP - Datos Prueba.xlsx")
     process_sheet(EXCEL, "22A-Elementos", N=22, page="A")
