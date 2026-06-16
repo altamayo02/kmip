@@ -40,7 +40,7 @@ class TpmLoader:
             raw = np.array([int(v, 16) for v in raw_str.ravel()], dtype=np.uint64)
             n = tamaño
             num_states = raw.shape[0]
-            result = np.zeros((num_states, n), dtype=np.float32)
+            result = np.zeros((num_states, n), dtype=np.uint8)
             for col in range(n):
                 result[:, col] = (raw >> col) & 1
             return result
