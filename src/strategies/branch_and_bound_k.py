@@ -284,8 +284,8 @@ def validate_state_node_tpm(tpm: np.ndarray) -> None:
     expected = 2 ** cols
     if rows != expected:
         raise ValueError(f"TPM shape mismatch: got ({rows}, {cols}), expected ({expected}, {cols})")
-    if np.any(tpm < 0) or np.any(tpm > 1):
-        raise ValueError("TPM values must be in [0, 1]")
+    if np.any(tpm < -1e-12) or np.any(tpm > 1 + 1e-12):
+        raise ValueError(f"TPM values must be in [0, 1], got range [{tpm.min():.4f}, {tpm.max():.4f}]")
 
 
 def state_state_to_state_node_off_probs(tpm_ss: np.ndarray) -> np.ndarray:
@@ -352,18 +352,20 @@ def reconstruct_distribution(partition: tuple[int, ...], codec: VariableCodec,
         d = part_distribution(state_node_tpm, mech, purv, initial_state)
         part_dists.append((d, purv))
     gs = 2 ** n_nodes
-    recon = np.zeros(gs)
-    for s in range(gs):
-        prob = 1.0
-        for d, purv in part_dists:
-            if not purv:
-                continue
-            idx = 0
-            for k, pidx in enumerate(purv):
-                if state_bit(s, pidx):
-                    idx |= (1 << k)
-            prob *= d[idx]
-        recon[s] = prob
+
+    # Vectorized reconstruction: build global_state -> block index mapping
+    recon = np.ones(gs, dtype=np.float64)
+    for d, purv in part_dists:
+        if not purv:
+            continue
+        # For each global state, compute the index into this block's distribution
+        n_p = len(purv)
+        # Build integer index for each global state
+        idx = np.zeros(gs, dtype=np.int64)
+        for k, pidx in enumerate(purv):
+            bit = (np.arange(gs) >> pidx) & 1
+            idx |= bit << k
+        recon *= d[idx]
     return recon / recon.sum()
 
 
@@ -564,11 +566,19 @@ def run_heuristic_beam_final_phi(ctx: StateNodeTPMContext, target_k: int,
     gen_registry = {"selection": SelectionSplitGenerator(), "bruteforce": BruteForceSmallBlockGenerator()}
     generators = [gen_registry[name] for name in generator_names if name in gen_registry]
 
-    # Initial incumbent from selection direct (complete k-block partitions)
+    # Initial incumbent: use root phi=0, then improve via beam.
+    # Skip full selection_direct seeding for large n (too many phi evals).
     best_phi = float("inf")
     best_part = None
     incumbent_source = "none"
+
+    # Limited seeding: evaluate at most 100 selection_direct candidates
+    max_sel = 100
+    sel_count = 0
     for sel_part in enumerate_node_selection_partitions(n, target_k):
+        sel_count += 1
+        if sel_count > max_sel:
+            break
         created += 1
         complete_count += 1
         phi = phi_partition(sel_part, ctx)
@@ -586,9 +596,8 @@ def run_heuristic_beam_final_phi(ctx: StateNodeTPMContext, target_k: int,
     frontier_sizes[1] = 1
 
     for level in range(2, target_k + 1):
-        next_frontier: list[_BeamItem] = []
-        seen_phis: dict[tuple[int, ...], float] = {}
-
+        # Phase 1: generate all candidates with cheap proxy scores
+        raw_candidates: list[tuple[int, ...]] = []
         for item in frontier:
             for block in item.partition:
                 if popcount(block) < 2:
@@ -597,38 +606,54 @@ def run_heuristic_beam_final_phi(ctx: StateNodeTPMContext, target_k: int,
                     splits = gen.generate(item.partition, block, ctx, top_l)
                     for sp in splits:
                         child = apply_split(item.partition, sp.block_mask, sp.left_mask, sp.right_mask)
-                        child_phi = phi_partition(child, ctx)
-                        created += 1
+                        raw_candidates.append(child)
 
-                        if len(child) == target_k:
-                            complete_count += 1
-                            # Update incumbent ONLY with complete partitions
-                            if child_phi < best_phi - 1e-12:
-                                best_phi = child_phi
-                                best_part = child
-                                incumbent_source = f"beam_level_{level}"
-                        else:
-                            partial_count += 1
-                            # Keep partial candidate for beam expansion
-                            if child not in seen_phis or child_phi < seen_phis[child]:
-                                seen_phis[child] = child_phi
+        if not raw_candidates:
+            raise RuntimeError(
+                f"Beam search died at level {level}/{target_k}: "
+                f"no valid splits from frontier of size {len(frontier)}"
+            )
 
-                        if max_nodes and created >= max_nodes:
-                            break
-                    if max_nodes and created >= max_nodes:
-                        break
-                if max_nodes and created >= max_nodes:
-                    break
+        # Phase 2: deduplicate by partition identity
+        seen_unique: dict[tuple[int, ...], bool] = {}
+        for child in raw_candidates:
+            seen_unique[child] = True
+        unique = list(seen_unique.keys())
+
+        # Phase 3: evaluate exact phi for beam_width candidates (the rest get proxy)
+        # Score by block size variance as cheap proxy
+        scored: list[tuple[float, tuple[int, ...]]] = []
+        for child in unique:
+            sizes = [popcount(b) for b in child]
+            proxy = float(np.std(sizes)) if len(sizes) > 1 else 0.0
+            scored.append((proxy, child))
+        scored.sort(key=lambda x: x[0])
+
+        # Only compute exact phi for beam_width candidates
+        next_frontier_map: dict[tuple[int, ...], float] = {}
+        for _, child in scored[:beam_width]:
+            child_phi = phi_partition(child, ctx)
+            created += 1
+
+            if len(child) == target_k:
+                complete_count += 1
+                if child_phi < best_phi - 1e-12:
+                    best_phi = child_phi
+                    best_part = child
+                    incumbent_source = f"beam_level_{level}"
+            else:
+                partial_count += 1
+                next_frontier_map[child] = child_phi
+
             if max_nodes and created >= max_nodes:
                 break
 
-        if timeout and (time.time() - start) >= timeout:
-            break
+        # For remaining candidates, don't compute phi (save time)
+        # They are dropped from the frontier
 
-        # Build next frontier from partial candidates
-        next_items = [_BeamItem(p, ph) for p, ph in seen_phis.items()]
-        next_items.sort(key=lambda x: x.phi)
-        frontier = next_items[:beam_width]
+        frontier = [_BeamItem(p, ph) for p, ph in next_frontier_map.items()]
+        frontier.sort(key=lambda x: x.phi)
+        frontier = frontier[:beam_width]
         frontier_sizes[level] = len(frontier)
 
         if max_nodes and created >= max_nodes:
@@ -636,12 +661,11 @@ def run_heuristic_beam_final_phi(ctx: StateNodeTPMContext, target_k: int,
         if timeout and (time.time() - start) >= timeout:
             break
 
-        # If no candidates and not at target_k, crash
-        if not next_items and level < target_k:
+        # If no candidates in frontier and not at target_k, crash
+        if not frontier and level < target_k:
             raise RuntimeError(
                 f"Beam search died at level {level}/{target_k}: "
-                f"no valid splits found. "
-                f"frontier={[(p, f'{ph:.4f}') for p, ph in frontier]}"
+                f"no valid splits found."
             )
 
     elapsed = time.time() - start
@@ -1149,13 +1173,9 @@ def branch_and_bound_k_from_state_node_tpm(
                 res = run_exact_final_phi(ctx, target_k, config)
                 return _final_phi_to_report(res, ctx, config, dataset_name, csv_path)
 
-        # Heuristic: use selection_direct if generators include "selection" alone,
-        # otherwise use beam search
-        gens = getattr(config, "generators", ("selection",))
-        if "selection" in gens and len(gens) == 1:
-            res = run_selection_direct_final_phi(ctx, target_k, config)
-        else:
-            res = run_heuristic_beam_final_phi(ctx, target_k, config)
+        # Heuristic: always use beam search (which seeds incumbent via selection_direct).
+        # selection_direct alone is too slow for large systems (C(30,4)=27405+ phi evals).
+        res = run_heuristic_beam_final_phi(ctx, target_k, config)
         return _final_phi_to_report(res, ctx, config, dataset_name, csv_path)
 
     # accumulated_path
@@ -1227,7 +1247,29 @@ def load_tpm_csv(path: str) -> np.ndarray:
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(f"TPM file not found: {p.resolve()}")
-    arr = np.loadtxt(str(p), delimiter=",", dtype=np.float64)
-    if arr.ndim != 2:
-        raise ValueError(f"CSV must be 2D, got shape {arr.shape}")
-    return arr
+
+    # Peek first line to determine format
+    with open(str(p), "r") as f:
+        first = f.readline().strip()
+    has_comma = "," in first
+    if has_comma:
+        n_cols = len(first.split(","))
+        if n_cols > 1:
+            arr = np.loadtxt(str(p), delimiter=",", dtype=np.float64)
+            return arr if arr.ndim == 2 else arr.reshape(-1, 1)
+
+    # Single column: decimal integer encoding of binary state
+    raw = np.loadtxt(str(p), dtype=np.uint64)
+    if raw.ndim == 0:
+        raw = np.array([raw.item()])
+    n_rows = raw.shape[0]
+    n = int(np.log2(n_rows))
+    if 2 ** n != n_rows:
+        raise ValueError(f"Rows must be a power of 2, got {n_rows}")
+
+    # Efficient bit extraction: allocate result, fill column by column
+    # This avoids creating 25 large temporary arrays
+    result = np.empty((n_rows, n), dtype=np.float32)
+    for j in range(n):
+        result[:, j] = 1.0 - ((raw >> j) & 1).astype(np.float32)
+    return result

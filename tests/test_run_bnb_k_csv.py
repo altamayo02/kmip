@@ -65,10 +65,9 @@ class TestShapeValidation:
         csv_path = os.path.join(tmp_csv_dir, "bad.csv")
         tpm = np.zeros((7, 3))
         np.savetxt(csv_path, tpm, delimiter=",")
-        from src.strategies.branch_and_bound_k import load_tpm_csv, ensure_state_node_tpm
-        raw = load_tpm_csv(csv_path)
+        from src.strategies.branch_and_bound_k import load_tpm_csv
         with pytest.raises((ValueError,), match="Rows must be a power"):
-            ensure_state_node_tpm(raw)
+            load_tpm_csv(csv_path)
 
 
 class TestInitialState:

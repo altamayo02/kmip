@@ -228,10 +228,9 @@ def main():
             config.beam_width = min(config.beam_width, 10)
 
     # Determine algorithm name
-    algo_name = "selection_direct" if (args.objective == "final_phi" and args.mode == "heuristic"
-                                        and args.generators == "selection") else (
-        "beam_search" if args.objective == "final_phi" and args.mode == "heuristic" else
+    algo_name = (
         "exact_enumeration" if args.objective == "final_phi" and args.mode == "exact" else
+        "beam_search" if args.objective == "final_phi" and args.mode == "heuristic" else
         "accumulated_path_bnb"
     )
 
